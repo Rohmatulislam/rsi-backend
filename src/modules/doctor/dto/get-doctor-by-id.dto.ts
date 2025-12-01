@@ -1,7 +1,7 @@
-import { isString, isUUID } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 
 export class GetDoctorByIdDto {
-  @isString()
-  @isUUID()
+  @IsString()
+  @IsUUID()
   readonly id: string;
 }

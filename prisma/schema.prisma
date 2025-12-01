@@ -1,59 +1,135 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+
 }
 
 model Doctor {
-  id          String   @id @default(cuid())
-  name        String
-  email       String   @unique
-  phone       String?
-  specialization String?
-  department  String?
-  licenseNumber String @unique
-  avatar      String?
-  bio         String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String
+  email             String   @unique
+  phone             String?
+  specialization    String?
+  department        String?
+  licenseNumber     String   @unique
+  avatar            String?
+  bio               String?
+  experience_years  Int?
+  education         String?
+  certifications    String?
+  consultation_fee  Int?
+  specialtyImage_url String?
+  is_executive      Boolean?
+  sip_number        String?
+  bpjs              Boolean?
+  slug              String?  @unique
+  kd_dokter         String?
+  description       String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   appointments Appointment[]
   schedules    Schedule[]
 }
 
 model Appointment {
-  id          String   @id @default(cuid())
-  patientId   String
-  doctorId    String
+  id              String   @id @default(cuid())
+  patientId       String
+  doctorId        String
   appointmentDate DateTime
-  status      String   @default("scheduled") // scheduled, confirmed, completed, cancelled
-  reason      String?
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status          String   @default("scheduled") // scheduled, confirmed, completed, cancelled
+  reason          String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
-  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+  doctor Doctor @relation(fields: [doctorId], references: [id])
 }
 
 model Schedule {
   id          String   @id @default(cuid())
   doctorId    String
-  dayOfWeek   Int      // 0 = Sunday, 1 = Monday, etc.
-  startTime   String   // Format: "HH:mm"
-  endTime     String   // Format: "HH:mm"
+  dayOfWeek   Int // 0 = Sunday, 1 = Monday, etc.
+  startTime   String // Format: "HH:mm"
+  endTime     String // Format: "HH:mm"
   maxPatients Int?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+  doctor Doctor @relation(fields: [doctorId], references: [id])
 }
 
+model User {
+  id            String    @id
+  name          String
+  email         String
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
 
+  @@unique([email])
+  @@map("user")
+}
 
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}

@@ -2,13 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { PrismaService } from 'src/infra/database/prisma.service';
-import { waitForDebugger } from 'inspector';
 
 @Injectable()
 export class DoctorService {
   constructor(private readonly prisma: PrismaService) {}
-  create(createDoctorDto: CreateDoctorDto) {
-    return 'This action adds a new doctor';
+
+  async create(createDoctorDto: CreateDoctorDto) {
+    return await this.prisma.doctor.create({
+      data: createDoctorDto,
+    });
   }
 
   async findAll() {
@@ -21,11 +23,16 @@ export class DoctorService {
     });
   }
 
-  update(id: number, updateDoctorDto: UpdateDoctorDto) {
-    return `This action updates a #${id} doctor`;
+  async update(id: string, updateDoctorDto: UpdateDoctorDto) {
+    return await this.prisma.doctor.update({
+      where: { id },
+      data: updateDoctorDto,
+    });
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} doctor`;
+  async remove(id: string) {
+    return await this.prisma.doctor.delete({
+      where: { id },
+    });
   }
 }
