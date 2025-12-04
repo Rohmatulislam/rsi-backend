@@ -1,15 +1,25 @@
-import { Injectable } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import 'dotenv/config';
+import { Injectable, OnModuleInit } from '@nestjs/common';
+import { PrismaClient } from '../../../generated/prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { Client } from 'pg';
+import { Pool } from 'pg';
+
+// Create pool once and reuse
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const adapter = new PrismaPg(pool);
 
 @Injectable()
-export class PrismaService extends PrismaClient {
+export class PrismaService extends PrismaClient implements OnModuleInit {
   constructor() {
-    const client = new Client({
-      connectionString: process.env.DATABASE_URL,
-    });
-    const adapter = new PrismaPg(client);
-    super({ adapter });
+    super({
+      adapter,
+    } as any);
+  }
+
+  async onModuleInit() {
+    await this.$connect();
   }
 }

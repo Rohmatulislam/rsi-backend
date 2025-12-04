@@ -1,12 +1,15 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { PrismaService } from '../database/prisma.service';
-
-// Inisialisasi PrismaService untuk digunakan dengan better-auth
-const prismaService = new PrismaService();
+import { bearer } from 'better-auth/plugins';
 
 export const auth = betterAuth({
-  database: prismaAdapter(prismaService, {
+  database: prismaAdapter(new PrismaService(), {
     provider: 'postgresql',
   }),
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: false,
+  },
+  plugins: [bearer()],
 });
