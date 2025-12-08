@@ -6,7 +6,6 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
 }
 
 datasource db {
@@ -39,9 +38,44 @@ model Doctor {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
+  // Relations
   appointments Appointment[]
   schedules    Schedule[]
+  categories   Category[]    @relation("DoctorCategory")
 }
+
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   // Nama kategori (e.g., "Poli Umum", "Bedah", "Anak")
+  slug        String   @unique // URL-friendly name
+  type        CategoryType // Jenis kategori
+  description String?  // Deskripsi kategori
+  icon        String?  // Icon name atau URL
+  color       String?  // Warna untuk UI (hex code)
+  order       Int      @default(0) // Urutan tampilan
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  doctors     Doctor[] @relation("DoctorCategory")
+  services    Service[] @relation("ServiceCategory")
+  articles    Article[] @relation("ArticleCategory")
+}
+
+enum CategoryType {
+  POLI              // Poliklinik (Poli Umum, Poli Anak, dll)
+  SPECIALIST        // Spesialisasi Dokter (Bedah, Jantung, dll)
+  SERVICE           // Layanan (Rawat Inap, Rawat Jalan, dll)
+  FACILITY          // Fasilitas (Laboratorium, Radiologi, dll)
+  EMERGENCY         // Layanan Darurat (IGD, Ambulance)
+  SUPPORT           // Layanan Pendukung (Farmasi, Gizi, dll)
+  FEATURED          // Layanan Unggulan
+  DEPARTMENT        // Departemen/Unit
+  ARTICLE_CATEGORY  // Kategori Artikel/Berita
+}
+
 
 model Appointment {
   id              String   @id @default(cuid())
@@ -132,4 +166,50 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String   // Nama layanan (e.g., "Rawat Inap", "MCU")
+  slug        String   @unique
+  description String?  @db.Text
+  icon        String?  // Icon name
+  image       String?  // Image URL
+  price       Int?     // Harga layanan (jika ada)
+  duration    Int?     // Durasi layanan dalam menit
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false) // Layanan unggulan
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  categories  Category[] @relation("ServiceCategory")
+}
+
+model Article {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  content     String   @db.Text
+  excerpt     String?  @db.Text
+  image       String?  // Featured image
+  author      String?
+  authorId    String?  // Reference to User if needed
+  status      ArticleStatus @default(DRAFT)
+  publishedAt DateTime?
+  viewCount   Int      @default(0)
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  categories  Category[] @relation("ArticleCategory")
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
 }

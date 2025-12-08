@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { PrismaService } from 'src/infra/database/prisma.service';
+import { DoctorSortBy, GetDoctorsDto } from './dto/get-doctors.dto';
 
 @Injectable()
 export class DoctorService {
@@ -13,8 +14,53 @@ export class DoctorService {
     });
   }
 
-  async findAll() {
-    return await this.prisma.doctor.findMany();
+  async findAll(getDoctorsDto: GetDoctorsDto) {
+
+    switch (getDoctorsDto.sortBy) {
+      case DoctorSortBy.RECOMMENDED:
+        return this.getRecommendedDoctors(getDoctorsDto.limit);
+      default:
+        return this.prisma.doctor.findMany({
+          take: getDoctorsDto.limit,
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            specialization: true,
+            consultation_fee: true,
+            is_executive: true,
+            bpjs: true,
+            categories: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        });
+    }
+  }
+
+  // TODO: Implement recommended doctors algorithm
+  private async getRecommendedDoctors(limit: number) {
+  const doctors = await this.prisma.doctor.findMany({
+    take: limit,
+   select: {
+    id: true,
+    name: true,
+    slug: true,
+    specialization: true,
+    consultation_fee: true,
+    is_executive: true,
+    bpjs: true,
+    categories: {
+      select: {
+        name: true,
+      },
+    },
+  },
+
+  });
+  return doctors;
   }
 
   async findOne(id: string) {

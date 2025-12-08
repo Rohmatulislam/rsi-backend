@@ -21,7 +21,9 @@
     "dev": "nest start --watch",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:seed": "node prisma/seed-direct.js",
+    "db:reset": "prisma migrate reset"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.9",
@@ -31,7 +33,7 @@
     "@nestjs/platform-express": "^11.1.9",
     "@prisma/adapter-better-sqlite3": "^7.0.1",
     "@prisma/adapter-pg": "^7.0.1",
-    "@prisma/client": "^7.0.1",
+    "@prisma/client": "^7.1.0",
     "@thallesp/nestjs-better-auth": "^2.2.0",
     "better-auth": "^1.4.4",
     "class-transformer": "^0.5.1",
