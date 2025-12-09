@@ -16,11 +16,11 @@ export class DoctorService {
 
   async findAll(getDoctorsDto: GetDoctorsDto) {
 
-    switch (getDoctorsDto.sortBy) {
+    switch (getDoctorsDto.sort) {
       case DoctorSortBy.RECOMMENDED:
         return this.getRecommendedDoctors(getDoctorsDto.limit);
       default:
-        return this.prisma.doctor.findMany({
+        const doctors = await this.prisma.doctor.findMany({
           take: getDoctorsDto.limit,
           select: {
             id: true,
@@ -29,7 +29,15 @@ export class DoctorService {
             specialization: true,
             consultation_fee: true,
             is_executive: true,
-            bpjs: true,
+            imageUrl: true,
+            department: true,
+            schedules: {
+              select: {
+                dayOfWeek: true,
+                startTime: true,
+                endTime: true,
+              }
+            },
             categories: {
               select: {
                 name: true,
@@ -44,7 +52,7 @@ export class DoctorService {
   private async getRecommendedDoctors(limit: number) {
   const doctors = await this.prisma.doctor.findMany({
     take: limit,
-   select: {
+    select: {
     id: true,
     name: true,
     slug: true,
@@ -52,6 +60,15 @@ export class DoctorService {
     consultation_fee: true,
     is_executive: true,
     bpjs: true,
+    imageUrl: true,
+    department: true,
+    schedules: {
+      select: {
+        dayOfWeek: true,
+        startTime: true,
+        endTime: true,
+      }
+    },
     categories: {
       select: {
         name: true,

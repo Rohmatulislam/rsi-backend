@@ -21,7 +21,7 @@ model Doctor {
   specialization    String?
   department        String?
   licenseNumber     String   @unique
-  avatar            String?
+  imageUrl          String?
   bio               String?
   experience_years  Int?
   education         String?

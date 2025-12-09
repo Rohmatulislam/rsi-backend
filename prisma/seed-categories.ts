@@ -1,9 +1,17 @@
-// Simple seed script using pg directly
-const { Pool } = require('pg');
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
+import 'dotenv/config';
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/rsidb'
+  connectionString: process.env.DATABASE_URL,
 });
+const adapter = new PrismaPg(pool);
+
+const prisma = new PrismaClient({
+  adapter,
+  log: ['query', 'info', 'warn', 'error'],
+} as any);
 
 const categories = [
   // POLI
@@ -55,16 +63,23 @@ const categories = [
 ];
 
 async function seed() {
-  console.log('🌱 Starting seed with direct pg connection...');
+  console.log('🌱 Starting seed categories with Prisma...');
   
   try {
     for (const cat of categories) {
-      await pool.query(
-        `INSERT INTO "Category" (id, name, slug, type, icon, color, "order", "isActive", "createdAt", "updatedAt")
-         VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, true, NOW(), NOW())
-         ON CONFLICT (slug) DO NOTHING`,
-        [cat.name, cat.slug, cat.type, cat.icon, cat.color, cat.order]
-      );
+      await prisma.category.upsert({
+        where: { slug: cat.slug },
+        update: {}, // Jika sudah ada, tidak perlu update apapun
+        create: {
+          name: cat.name,
+          slug: cat.slug,
+          type: cat.type as any, // Cast to any to avoid enum type issues in seed script for now
+          icon: cat.icon,
+          color: cat.color,
+          order: cat.order,
+          isActive: true,
+        },
+      });
     }
     
     console.log(`✅ Successfully seeded ${categories.length} categories!`);
@@ -72,7 +87,7 @@ async function seed() {
     console.error('❌ Seed failed:', error);
     process.exit(1);
   } finally {
-    await pool.end();
+    await prisma.$disconnect();
   }
 }
 

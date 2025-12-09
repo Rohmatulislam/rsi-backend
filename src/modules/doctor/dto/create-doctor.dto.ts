@@ -24,7 +24,7 @@ export class CreateDoctorDto {
 
   @IsOptional()
   @IsString()
-  avatar?: string;
+  imageUrl?: string;
 
   @IsOptional()
   @IsString()

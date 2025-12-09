@@ -12,7 +12,7 @@ export class GetDoctorsDto {
 
    @IsOptional()
    @IsEnum(DoctorSortBy)
-   sortBy?: DoctorSortBy;
+   sort?: DoctorSortBy;
 
 
 }
