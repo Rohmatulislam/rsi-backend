@@ -98,4 +98,26 @@ export class DoctorService {
       where: { id },
     });
   }
+  async findBySlug(slug: string) {
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { slug },
+      include: {
+        categories: true,
+        schedules: true,
+      }
+    });
+    
+    // Fallback search by ID if slug not found (just in case frontend sends ID)
+    if (!doctor) {
+       return await this.prisma.doctor.findUnique({
+          where: { id: slug },
+           include: {
+            categories: true,
+            schedules: true,
+          }
+       });
+    }
+
+    return doctor;
+  }
 }

@@ -25,7 +25,11 @@ export class DoctorController {
     return this.doctorService.findAll(getDoctorsDto);
   }
 
-
+  @Get(':slug')
+  @AllowAnonymous()
+  findBySlug(@Param('slug') slug: string) {
+    return this.doctorService.findBySlug(slug);
+  }
   @Post()
   create(@Body() createDoctorDto: CreateDoctorDto) {
     return this.doctorService.create(createDoctorDto);
