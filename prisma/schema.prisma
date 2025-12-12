@@ -32,7 +32,7 @@ model Doctor {
   sip_number        String?
   bpjs              Boolean?
   slug              String?  @unique
-  kd_dokter         String?
+  kd_dokter         String?  @unique  // Added unique constraint to allow use in where unique input
   description       String?
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -80,6 +80,10 @@ enum CategoryType {
 model Appointment {
   id              String   @id @default(cuid())
   patientId       String
+  patientName     String?
+  patientPhone    String?
+  patientEmail    String?
+  patientAddress  String?
   doctorId        String
   appointmentDate DateTime
   status          String   @default("scheduled") // scheduled, confirmed, completed, cancelled
@@ -88,7 +92,8 @@ model Appointment {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  doctor Doctor @relation(fields: [doctorId], references: [id])
+  doctor       Doctor        @relation(fields: [doctorId], references: [id])
+  notifications Notification[]
 }
 
 model Schedule {
@@ -212,4 +217,19 @@ enum ArticleStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
+}
+
+model Notification {
+  id              String        @id @default(cuid())
+  type            String        // booking_confirmation, booking_cancellation, reminder, etc.
+  recipient       String        // Patient name
+  recipientContact String       // Email or phone
+  message         String        // Notification message
+  status          String        // sent, failed, pending
+  appointmentId   String?       // Reference to appointment
+  sentAt          DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  appointment Appointment? @relation(fields: [appointmentId], references: [id])
 }

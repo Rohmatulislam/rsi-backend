@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsDateString, IsEnum, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsDateString, IsEnum, IsOptional, IsEmail } from 'class-validator';
 
 export class CreateAppointmentDto {
   @IsNotEmpty()
@@ -15,6 +15,22 @@ export class CreateAppointmentDto {
 
   @IsOptional()
   @IsString()
+  patientName?: string;
+
+  @IsOptional()
+  @IsString()
+  patientPhone?: string;
+
+  @IsOptional()
+  @IsEmail()
+  patientEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  patientAddress?: string;
+
+  @IsOptional()
+  @IsString()
   mrNumber?: string; // For old patients
 
   @IsOptional()
@@ -28,7 +44,7 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   phone?: string;
-  
+
   @IsNotEmpty()
   @IsString()
   paymentType: 'umum' | 'bpjs';
@@ -36,4 +52,17 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   bpjsNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  keluhan?: string;
+
+  // New patient fields
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string; // YYYY-MM-DD - Required for new patients
+
+  @IsOptional()
+  @IsString()
+  gender?: 'L' | 'P'; // L = Laki-laki, P = Perempuan - Required for new patients
 }

@@ -17,7 +17,7 @@ import { GetDoctorsDto } from './dto/get-doctors.dto';
 
 @Controller('doctors')
 export class DoctorController {
-  constructor(private readonly doctorService: DoctorService) {}
+  constructor(private readonly doctorService: DoctorService) { }
 
   @Get()
   @AllowAnonymous()
@@ -35,6 +35,12 @@ export class DoctorController {
     return this.doctorService.create(createDoctorDto);
   }
 
+  @Post('sync')
+  @AllowAnonymous() // For now allow anonymous or secure it
+  sync() {
+    return this.doctorService.syncDoctors();
+  }
+
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateDoctorDto: UpdateDoctorDto) {
@@ -44,5 +50,19 @@ export class DoctorController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.doctorService.remove(id);
+  }
+  @Post(':id/schedules')
+  addSchedule(@Param('id') id: string, @Body() createScheduleDto: any) {
+    return this.doctorService.addSchedule(id, createScheduleDto);
+  }
+
+  @Patch('schedules/:id')
+  updateSchedule(@Param('id') id: string, @Body() updateScheduleDto: any) {
+    return this.doctorService.updateSchedule(id, updateScheduleDto);
+  }
+
+  @Delete('schedules/:id')
+  removeSchedule(@Param('id') id: string) {
+    return this.doctorService.removeSchedule(id);
   }
 }

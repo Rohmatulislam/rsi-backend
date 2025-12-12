@@ -4,9 +4,12 @@ import { AppService } from './app.service';
 import { DoctorModule } from './modules/doctor/doctor.module';
 import { DatabaseModule } from './infra/database/database.module';
 import { AppointmentModule } from './modules/appointment/appointment.module';
+import { ReminderModule } from './modules/reminder/reminder.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '@thallesp/nestjs-better-auth';
 import { auth } from './infra/auth/auth';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
@@ -14,12 +17,15 @@ import { auth } from './infra/auth/auth';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    ScheduleModule.forRoot(), // Enable scheduler globally
     AuthModule.forRoot({
       auth: auth,
     }),
     DoctorModule,
     DatabaseModule,
     AppointmentModule,
+    ReminderModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [AppService],

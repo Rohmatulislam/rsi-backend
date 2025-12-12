@@ -81,7 +81,8 @@ const doctorData = [
   bpjs: item.bpjs === 'TRUE',
   sip_number: item.sip_number,
   slug: item.slug,
-  kd_dokter: item.kd_dokter,
+  // Convert empty string to null for kd_dokter to avoid unique constraint issues
+  kd_dokter: item.kd_dokter && item.kd_dokter.trim() !== '' ? item.kd_dokter : null,
   specialtyImage_url: null, // Asumsikan null dulu atau mapping jika ada
   experience_years: item.experience_years ? parseInt(item.experience_years) : 0,
   description: item.description,
@@ -120,9 +121,36 @@ async function main() {
   for (const doctor of doctorData) {
     try {
       const categorySlug = getCategorySlug(doctor.specialization);
-      
-      const createdDoctor = await prisma.doctor.create({
-        data: {
+
+      // Use upsert instead of create to avoid unique constraint errors
+      const createdDoctor = await prisma.doctor.upsert({
+        where: {
+          email: doctor.email // Use email as unique identifier
+        },
+        update: {
+          // Update existing doctor data
+          name: doctor.name,
+          phone: doctor.phone,
+          specialization: doctor.specialization,
+          department: doctor.department,
+          licenseNumber: doctor.licenseNumber,
+          imageUrl: doctor.imageUrl,
+          bio: doctor.bio,
+          isActive: doctor.isActive,
+          consultation_fee: doctor.consultation_fee,
+          is_executive: doctor.is_executive,
+          bpjs: doctor.bpjs,
+          sip_number: doctor.sip_number,
+          slug: doctor.slug,
+          kd_dokter: doctor.kd_dokter,
+          specialtyImage_url: doctor.specialtyImage_url,
+          experience_years: doctor.experience_years,
+          description: doctor.description,
+          education: doctor.education,
+          certifications: doctor.certifications,
+        },
+        create: {
+          // Create new doctor if not exists
           name: doctor.name,
           email: doctor.email,
           phone: doctor.phone,
@@ -145,21 +173,17 @@ async function main() {
           certifications: doctor.certifications,
           categories: {
             connect: [
-               // Connect berdasarkan mapping spesialisasi
-               ...(categorySlug ? [{ slug: categorySlug }] : []),
-               // Connect ke Poli Executive jika is_executive true
-               ...(doctor.is_executive ? [{ slug: 'poli-executive' }] : []),
+              // Connect berdasarkan mapping spesialisasi
+              ...(categorySlug ? [{ slug: categorySlug }] : []),
+              // Connect ke Poli Executive jika is_executive true
+              ...(doctor.is_executive ? [{ slug: 'poli-executive' }] : []),
             ],
-          } 
+          }
         },
       });
-      console.log(`Dokter berhasil dibuat: ${createdDoctor.name} (${createdDoctor.id})`);
+      console.log(`✅ Dokter berhasil diproses: ${createdDoctor.name} (${createdDoctor.id})`);
     } catch (error: any) {
-      if (error.code === 'P2002') { // Unique constraint violation
-        console.warn(`Dokter dengan email atau license number '${doctor.email}' / '${doctor.licenseNumber}' sudah ada, dilewati.`);
-      } else {
-        console.error(`Error saat membuat dokter ${doctor.name}:`, error);
-      }
+      console.error(`❌ Error saat memproses dokter ${doctor.name}:`, error.message);
     }
   }
 

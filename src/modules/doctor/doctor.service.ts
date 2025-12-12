@@ -4,9 +4,14 @@ import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { PrismaService } from 'src/infra/database/prisma.service';
 import { DoctorSortBy, GetDoctorsDto } from './dto/get-doctors.dto';
 
+import { KhanzaService } from 'src/infra/database/khanza.service';
+
 @Injectable()
 export class DoctorService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly khanzaService: KhanzaService,
+  ) { }
 
   async create(createDoctorDto: CreateDoctorDto) {
     return await this.prisma.doctor.create({
@@ -14,17 +19,134 @@ export class DoctorService {
     });
   }
 
+  async syncDoctors() {
+    const kDoctors = await this.khanzaService.getDoctors();
+    const kSchedules = await this.khanzaService.getDoctorSchedules();
+    const kPolis = await this.khanzaService.getPoliklinik();
+    const kSpesialis = await this.khanzaService.getSpesialis();
+
+    let syncedCount = 0;
+
+    for (const doc of kDoctors) {
+      // 1. Map Data
+      const specialist = kSpesialis.find(s => s.kd_sps === doc.kd_sps);
+      const specializationName = specialist ? specialist.nm_sps : 'Umum';
+
+      // Slug generation
+      const slug = doc.nm_dokter.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+
+      // 2. Upsert Doctor
+      // Email is unique, so we might need a fake email if not provided in Khanza
+      // Or check if doctor already exists by kd_dokter
+      const existing = await this.prisma.doctor.findFirst({
+        where: { kd_dokter: doc.kd_dokter }
+      });
+
+      const doctorData = {
+        name: doc.nm_dokter,
+        kd_dokter: doc.kd_dokter,
+        phone: doc.no_telp,
+        specialization: specializationName,
+        slug: existing ? existing.slug : slug + '-' + Math.floor(Math.random() * 1000), // Avoid collision
+        email: existing ? existing.email : `dr.${doc.kd_dokter.toLowerCase()}@rsi.id`, // Dummy email
+        licenseNumber: existing ? existing.licenseNumber : `SIP-${doc.kd_dokter}`, // Dummy SIP
+        isActive: true
+      };
+
+      const savedDoctor = await this.prisma.doctor.upsert({
+        where: { kd_dokter: doc.kd_dokter },
+        update: {
+          name: doc.nm_dokter,
+          specialization: specializationName,
+          phone: doc.no_telp
+        },
+        create: doctorData
+      });
+
+      // 3. Upsert Schedules
+      const docSchedules = kSchedules.filter(s => s.kd_dokter === doc.kd_dokter);
+
+      // Clear existing schedules? Or Update?
+      // Simpler: Delete all schedules for this doctor and re-insert
+      await this.prisma.schedule.deleteMany({ where: { doctorId: savedDoctor.id } });
+
+      for (const sched of docSchedules) {
+        // Convert Hari (SENIN, SELASA..) to Int (1, 2..)
+        const daysMap: { [key: string]: number } = {
+          'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6,
+          'AKHAD': 0
+        };
+        const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
+
+        if (dayInt >= 0) {
+          await this.prisma.schedule.create({
+            data: {
+              doctorId: savedDoctor.id,
+              dayOfWeek: dayInt,
+              startTime: sched.jam_mulai, // Validation? 
+              endTime: sched.jam_selesai,
+            }
+          });
+
+          // 4. Link to Category (Poli)
+          const poli = kPolis.find(p => p.kd_poli === sched.kd_poli);
+          if (poli) {
+            // Check if category exists
+            const poliSlug = poli.nm_poli.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            const category = await this.prisma.category.upsert({
+              where: { slug: poliSlug },
+              update: {},
+              create: {
+                name: poli.nm_poli,
+                slug: poliSlug,
+                type: 'POLI'
+              }
+            });
+
+            // Connect Doctor to Category
+            // Need to check if already connected
+            const isConnected = await this.prisma.doctor.findFirst({
+              where: { id: savedDoctor.id, categories: { some: { id: category.id } } }
+            });
+
+            if (!isConnected) {
+              await this.prisma.doctor.update({
+                where: { id: savedDoctor.id },
+                data: { categories: { connect: { id: category.id } } }
+              });
+            }
+          }
+        }
+      }
+      syncedCount++;
+    }
+
+    return { message: `Synced ${syncedCount} doctors` };
+  }
+
   async findAll(getDoctorsDto: GetDoctorsDto) {
+    console.log('🔍 [FIND_ALL] Input DTO:', JSON.stringify(getDoctorsDto));
+    const where: any = {};
+    const isExecParam = getDoctorsDto.isExecutive;
+    // Only filter if explicitly true
+    if (isExecParam === true || String(isExecParam) === 'true') {
+      where.is_executive = true;
+    }
+    // Else (false, undefined, null) -> Show ALL (do not filter)
 
     switch (getDoctorsDto.sort) {
       case DoctorSortBy.RECOMMENDED:
         return this.getRecommendedDoctors(getDoctorsDto.limit);
       default:
-        const doctors = await this.prisma.doctor.findMany({
+        return await this.prisma.doctor.findMany({
+          where,
           take: getDoctorsDto.limit,
           select: {
             id: true,
             name: true,
+            kd_dokter: true,
             slug: true,
             specialization: true,
             consultation_fee: true,
@@ -33,6 +155,7 @@ export class DoctorService {
             department: true,
             schedules: {
               select: {
+                id: true,
                 dayOfWeek: true,
                 startTime: true,
                 endTime: true,
@@ -50,34 +173,34 @@ export class DoctorService {
 
   // TODO: Implement recommended doctors algorithm
   private async getRecommendedDoctors(limit: number) {
-  const doctors = await this.prisma.doctor.findMany({
-    take: limit,
-    select: {
-    id: true,
-    name: true,
-    slug: true,
-    specialization: true,
-    consultation_fee: true,
-    is_executive: true,
-    bpjs: true,
-    imageUrl: true,
-    department: true,
-    schedules: {
+    const doctors = await this.prisma.doctor.findMany({
+      take: limit,
       select: {
-        dayOfWeek: true,
-        startTime: true,
-        endTime: true,
-      }
-    },
-    categories: {
-      select: {
+        id: true,
         name: true,
+        slug: true,
+        specialization: true,
+        consultation_fee: true,
+        is_executive: true,
+        bpjs: true,
+        imageUrl: true,
+        department: true,
+        schedules: {
+          select: {
+            dayOfWeek: true,
+            startTime: true,
+            endTime: true,
+          }
+        },
+        categories: {
+          select: {
+            name: true,
+          },
+        },
       },
-    },
-  },
 
-  });
-  return doctors;
+    });
+    return doctors;
   }
 
   async findOne(id: string) {
@@ -98,7 +221,30 @@ export class DoctorService {
       where: { id },
     });
   }
+  async addSchedule(doctorId: string, createScheduleDto: any) {
+    return await this.prisma.schedule.create({
+      data: {
+        ...createScheduleDto,
+        doctorId,
+      },
+    });
+  }
+
+  async updateSchedule(scheduleId: string, updateScheduleDto: any) {
+    return await this.prisma.schedule.update({
+      where: { id: scheduleId },
+      data: updateScheduleDto,
+    });
+  }
+
+  async removeSchedule(scheduleId: string) {
+    return await this.prisma.schedule.delete({
+      where: { id: scheduleId },
+    });
+  }
+
   async findBySlug(slug: string) {
+    // ... (existing code found in file, we are just appending above it, but since I am replacing findBySlug block to ensure context is right or appending before it)
     const doctor = await this.prisma.doctor.findUnique({
       where: { slug },
       include: {
@@ -106,16 +252,15 @@ export class DoctorService {
         schedules: true,
       }
     });
-    
-    // Fallback search by ID if slug not found (just in case frontend sends ID)
+
     if (!doctor) {
-       return await this.prisma.doctor.findUnique({
-          where: { id: slug },
-           include: {
-            categories: true,
-            schedules: true,
-          }
-       });
+      return await this.prisma.doctor.findUnique({
+        where: { id: slug }, // Handle ID passed as slug
+        include: {
+          categories: true,
+          schedules: true,
+        }
+      });
     }
 
     return doctor;
