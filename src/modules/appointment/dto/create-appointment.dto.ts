@@ -9,6 +9,10 @@ export class CreateAppointmentDto {
   @IsDateString()
   bookingDate: string; // YYYY-MM-DD
 
+  @IsOptional()
+  @IsString()
+  bookingTime?: string; // HH:MM format - Optional for now
+
   @IsNotEmpty()
   @IsString()
   patientType: 'new' | 'old';
@@ -65,4 +69,8 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   gender?: 'L' | 'P'; // L = Laki-laki, P = Perempuan - Required for new patients
+
+  @IsOptional()
+  @IsString()
+  poliId?: string; // ID poliklinik yang dipilih
 }

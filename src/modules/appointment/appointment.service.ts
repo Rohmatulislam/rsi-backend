@@ -14,6 +14,57 @@ export class AppointmentService {
     private readonly notificationService: NotificationService,
   ) { }
 
+  // Mapping kategori ke kode poli Khanza
+  private async mapCategoryToKhanzaPoli(categoryName: string, doctorCode: string): Promise<string> {
+    // Ambil data poli dari sistem SIMRS Khanza berdasarkan dokter
+    // Di sini kita buat mapping berdasarkan nama kategori ke kode poli
+    // Ini adalah bagian penting untuk memastikan pilihan poliklinik yang benar dikirim ke SIMRS
+
+    // Ambil semua poliklinik yang tersedia untuk dokter ini dari sistem Khanza
+    const availablePolis = await this.khanzaService.getPoliklinik();
+
+    // Cari mapping berdasarkan nama kategori yang diketahui
+    if (categoryName.includes('Eksekutif') || categoryName.includes('eksekutif')) {
+      // Jika nama kategori mengandung kata 'Eksekutif', cari poliklinik eksekutif yang cocok
+      const execPoli = availablePolis.find((poli: any) =>
+        (poli.nm_poli.toLowerCase().includes('eksekutif') || poli.nm_poli.toLowerCase().includes('executive')) &&
+        (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
+         poli.nm_poli.toLowerCase().includes('kandungan') || // sesuaikan dengan spesialisasi dokter
+         poli.nm_poli.toLowerCase().includes('obgyn')) // atau istilah lain yang digunakan
+      );
+
+      if (execPoli) {
+        return execPoli.kd_poli;
+      }
+    } else if (categoryName.includes('Umum') || categoryName.includes('PKS') || categoryName.includes('Pks')) {
+      // Jika nama kategori mengandung kata 'Umum' atau 'PKS', cari poliklinik umum yang cocok
+      const generalPoli = availablePolis.find((poli: any) =>
+        (poli.nm_poli.toLowerCase().includes('umum') ||
+         poli.nm_poli.toLowerCase().includes('pks') ||
+         (poli.nm_poli.toLowerCase().includes('kandungan') &&
+          !poli.nm_poli.toLowerCase().includes('eksekutif'))) &&
+         (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
+          poli.nm_poli.toLowerCase().includes('kandungan'))
+      );
+
+      if (generalPoli) {
+        return generalPoli.kd_poli;
+      }
+    } else {
+      // Jika nama kategori bukan eksekutif atau umum/PKS, cari yang cocok secara umum
+      const matchingPoli = availablePolis.find((poli: any) =>
+        poli.nm_poli.toLowerCase().includes(categoryName.toLowerCase().replace('poli ', ''))
+      );
+
+      if (matchingPoli) {
+        return matchingPoli.kd_poli;
+      }
+    }
+
+    // Jika tidak ditemukan mapping, kembalikan poli default dokter
+    return await this.khanzaService.findPoliByDoctor(doctorCode);
+  }
+
   async create(createAppointmentDto: CreateAppointmentDto) {
     this.logger.log('Creating appointment', createAppointmentDto);
 
@@ -106,7 +157,26 @@ export class AppointmentService {
     }
 
     // Lookup Poli
-    const poliCode = await this.khanzaService.findPoliByDoctor(doctor.kd_dokter);
+    let poliCode = '';
+
+    // Jika poliId disediakan dari frontend, cari informasi kode poli yang sesuai
+    if (createAppointmentDto.poliId) {
+      // Kita perlu mengambil informasi kode poli berdasarkan ID kategori
+      const selectedCategory = await this.prisma.category.findUnique({
+        where: { id: createAppointmentDto.poliId }
+      });
+
+      if (selectedCategory) {
+        // Ambil kode poli dari field slug atau cari mapping ke kode poli Khanza
+        // Kita perlu mapping berdasarkan nama kategori ke kode poli Khanza
+        poliCode = await this.mapCategoryToKhanzaPoli(selectedCategory.name, doctor.kd_dokter);
+      }
+    }
+
+    // Fallback: gunakan poli default dokter jika tidak ada pilihan spesifik
+    if (!poliCode) {
+      poliCode = await this.khanzaService.findPoliByDoctor(doctor.kd_dokter);
+    }
 
     // 2. Insert ke Reg Periksa (Bridging Real)
     try {
@@ -125,11 +195,20 @@ export class AppointmentService {
       const finalPatientAddress = createAppointmentDto.patientAddress || patient.alamat;
 
       // 3. Simpan Log di Local DB (Prisma)
+      let appointmentDateTime = bookingDate;
+
+      // If bookingTime is provided, combine it with bookingDate
+      if (createAppointmentDto.bookingTime) {
+        const [hours, minutes] = createAppointmentDto.bookingTime.split(':').map(Number);
+        appointmentDateTime = new Date(bookingDate);
+        appointmentDateTime.setHours(hours, minutes, 0, 0);
+      }
+
       const appointment = await this.prisma.appointment.create({
         data: {
           patientId: patient.no_rkm_medis,
           doctorId: doctor.id,
-          appointmentDate: bookingDate,
+          appointmentDate: appointmentDateTime,
           status: 'scheduled',
           reason: createAppointmentDto.keluhan || 'Online Booking via Website',
           notes: `No Reg: ${bookingResult.no_reg}, No Rawat: ${bookingResult.no_rawat}`,
@@ -156,8 +235,8 @@ export class AppointmentService {
           patientName: finalPatientName,
           patientPhone: finalPatientPhone,
           patientEmail: finalPatientEmail,
-          bookingDate: bookingDate.toLocaleDateString('id-ID'),
-          bookingTime: bookingDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          bookingDate: appointmentDateTime.toLocaleDateString('id-ID'),
+          bookingTime: appointmentDateTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
           doctorName: doctorDetails?.name || 'Unknown Doctor',
           bookingCode: bookingResult.no_reg,
           poliName: poliDetails?.nm_poli || 'Poliklinik Umum',

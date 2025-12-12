@@ -163,7 +163,9 @@ export class DoctorService {
             },
             categories: {
               select: {
+                id: true,
                 name: true,
+                slug: true,
               },
             },
           },
@@ -194,7 +196,9 @@ export class DoctorService {
         },
         categories: {
           select: {
+            id: true,
             name: true,
+            slug: true,
           },
         },
       },
