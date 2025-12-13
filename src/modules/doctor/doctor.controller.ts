@@ -7,7 +7,10 @@ import {
   Param,
   Delete,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { DoctorService } from './doctor.service';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
@@ -45,6 +48,42 @@ export class DoctorController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateDoctorDto: UpdateDoctorDto) {
     return this.doctorService.update(id, updateDoctorDto);
+  }
+
+  @Patch(':id/image')
+  updateImage(@Param('id') id: string, @Body('imageUrl') imageUrl: string) {
+    return this.doctorService.updateDoctorImage(id, imageUrl);
+  }
+
+  @Post(':id/upload-image')
+  @UseInterceptors(FileInterceptor('image', {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB
+    },
+    fileFilter: (req, file, cb) => {
+      // Hanya izinkan file gambar
+      if (!file.mimetype.startsWith('image/')) {
+        cb(new Error('File harus berupa gambar'), false);
+        return;
+      }
+      cb(null, true);
+    },
+  }))
+  async uploadImage(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+    @Body('base64Image') base64Image: string
+  ) {
+    if (base64Image) {
+      // Jika base64Image dikirim, gunakan itu
+      return this.doctorService.updateDoctorImage(id, base64Image);
+    } else if (file) {
+      // Jika file diupload, konversi ke base64
+      const imageData = `data:image/${file.mimetype.split('/')[1]};base64,${file.buffer.toString('base64')}`;
+      return this.doctorService.updateDoctorImage(id, imageData);
+    } else {
+      throw new Error('Tidak ada gambar yang dikirim');
+    }
   }
 
   @Delete(':id')

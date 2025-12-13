@@ -9,7 +9,23 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false,
+    requireEmailVerification: false, // Nonaktifkan dulu untuk development
   },
-  plugins: [bearer()],
+  user: {
+    // Menambahkan field tambahan untuk sistem rumah sakit
+    additionalFields: {
+      role: {
+        type: 'string',
+        required: false, // Tidak wajib dulu
+        defaultValue: 'user' // Default role
+      },
+      licenseNumber: {
+        type: 'string',
+        required: false // Hanya untuk dokter
+      }
+    }
+  },
+  plugins: [
+    bearer(),
+  ],
 });

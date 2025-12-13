@@ -27,7 +27,7 @@ export class AdminService {
     let appointments = await this.appointmentService.getAllAppointments();
 
     if (startDate && endDate) {
-      appointments = appointments.filter(app => 
+      appointments = appointments.filter(app =>
         app.appointmentDate >= startDate && app.appointmentDate <= endDate
       );
     }

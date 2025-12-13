@@ -469,4 +469,5 @@ export class AppointmentService {
       throw new BadRequestException('Gagal mencari data pasien');
     }
   }
+
 }

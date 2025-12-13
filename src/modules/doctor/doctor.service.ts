@@ -5,18 +5,50 @@ import { PrismaService } from 'src/infra/database/prisma.service';
 import { DoctorSortBy, GetDoctorsDto } from './dto/get-doctors.dto';
 
 import { KhanzaService } from 'src/infra/database/khanza.service';
+import { FileUploadService } from './services/file-upload.service';
 
 @Injectable()
 export class DoctorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly khanzaService: KhanzaService,
+    private readonly fileUploadService: FileUploadService,
   ) { }
 
   async create(createDoctorDto: CreateDoctorDto) {
     return await this.prisma.doctor.create({
       data: createDoctorDto,
     });
+  }
+
+  async updateDoctorImage(doctorId: string, imageUrl: string) {
+    // Jika imageUrl adalah data URI (base64), kita harus menyimpannya sebagai file
+    let processedImageUrl = imageUrl;
+
+    if (imageUrl.startsWith('data:image')) {
+      // Ini adalah base64 image, kita harus menyimpannya sebagai file
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { id: doctorId }
+      });
+
+      // Generate filename
+      const fileExtension = imageUrl.split(';')[0].split('/')[1]; // Ambil ekstensi dari data URI
+      const fileName = `doctor-${doctorId}.${fileExtension}`;
+
+      // Simpan gambar dan dapatkan path-nya
+      processedImageUrl = await this.fileUploadService.saveDoctorImage(
+        imageUrl,
+        fileName,
+        doctor?.imageUrl // Gambar lama untuk dihapus
+      );
+    }
+
+    const updatedDoctor = await this.prisma.doctor.update({
+      where: { id: doctorId },
+      data: { imageUrl: processedImageUrl },
+    });
+
+    return updatedDoctor;
   }
 
   async syncDoctors() {
@@ -52,7 +84,8 @@ export class DoctorService {
         slug: existing ? existing.slug : slug + '-' + Math.floor(Math.random() * 1000), // Avoid collision
         email: existing ? existing.email : `dr.${doc.kd_dokter.toLowerCase()}@rsi.id`, // Dummy email
         licenseNumber: existing ? existing.licenseNumber : `SIP-${doc.kd_dokter}`, // Dummy SIP
-        isActive: true
+        isActive: true,
+        imageUrl: existing ? existing.imageUrl : null // Gunakan imageUrl dari dokter existing jika ada
       };
 
       const savedDoctor = await this.prisma.doctor.upsert({
@@ -146,13 +179,25 @@ export class DoctorService {
           select: {
             id: true,
             name: true,
-            kd_dokter: true,
-            slug: true,
+            email: true,
+            licenseNumber: true,
+            phone: true,
             specialization: true,
-            consultation_fee: true,
-            is_executive: true,
-            imageUrl: true,
             department: true,
+            imageUrl: true,
+            bio: true,
+            experience_years: true,
+            education: true,
+            certifications: true,
+            consultation_fee: true,
+            specialtyImage_url: true,
+            is_executive: true,
+            sip_number: true,
+            bpjs: true,
+            slug: true,
+            kd_dokter: true,
+            description: true,
+            isActive: true,
             schedules: {
               select: {
                 id: true,
@@ -180,13 +225,25 @@ export class DoctorService {
       select: {
         id: true,
         name: true,
-        slug: true,
+        email: true,
+        licenseNumber: true,
+        phone: true,
         specialization: true,
-        consultation_fee: true,
-        is_executive: true,
-        bpjs: true,
-        imageUrl: true,
         department: true,
+        imageUrl: true,
+        bio: true,
+        experience_years: true,
+        education: true,
+        certifications: true,
+        consultation_fee: true,
+        specialtyImage_url: true,
+        is_executive: true,
+        sip_number: true,
+        bpjs: true,
+        slug: true,
+        kd_dokter: true,
+        description: true,
+        isActive: true,
         schedules: {
           select: {
             dayOfWeek: true,
@@ -210,10 +267,48 @@ export class DoctorService {
   async findOne(id: string) {
     return await this.prisma.doctor.findUnique({
       where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        licenseNumber: true,
+        phone: true,
+        specialization: true,
+        department: true,
+        imageUrl: true,
+        bio: true,
+        experience_years: true,
+        education: true,
+        certifications: true,
+        consultation_fee: true,
+        specialtyImage_url: true,
+        is_executive: true,
+        sip_number: true,
+        bpjs: true,
+        slug: true,
+        kd_dokter: true,
+        description: true,
+        isActive: true,
+      }
     });
   }
 
   async update(id: string, updateDoctorDto: UpdateDoctorDto) {
+    // Jika update termasuk kd_dokter, lakukan validasi unik
+    if (updateDoctorDto.kd_dokter) {
+      // Cek apakah kd_dokter yang baru sudah digunakan oleh dokter lain
+      const existingDoctor = await this.prisma.doctor.findFirst({
+        where: {
+          kd_dokter: updateDoctorDto.kd_dokter,
+          id: { not: id }, // Exclude current doctor
+        },
+      });
+
+      if (existingDoctor) {
+        throw new Error(`Kode dokter ${updateDoctorDto.kd_dokter} sudah digunakan oleh dokter lain: ${existingDoctor.name}`);
+      }
+    }
+
     return await this.prisma.doctor.update({
       where: { id },
       data: updateDoctorDto,
@@ -248,21 +343,88 @@ export class DoctorService {
   }
 
   async findBySlug(slug: string) {
-    // ... (existing code found in file, we are just appending above it, but since I am replacing findBySlug block to ensure context is right or appending before it)
     const doctor = await this.prisma.doctor.findUnique({
       where: { slug },
-      include: {
-        categories: true,
-        schedules: true,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        licenseNumber: true,
+        phone: true,
+        specialization: true,
+        department: true,
+        imageUrl: true,
+        bio: true,
+        experience_years: true,
+        education: true,
+        certifications: true,
+        consultation_fee: true,
+        specialtyImage_url: true,
+        is_executive: true,
+        sip_number: true,
+        bpjs: true,
+        slug: true,
+        kd_dokter: true,
+        description: true,
+        isActive: true,
+        schedules: {
+          select: {
+            id: true,
+            dayOfWeek: true,
+            startTime: true,
+            endTime: true,
+          }
+        },
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
       }
     });
 
     if (!doctor) {
       return await this.prisma.doctor.findUnique({
         where: { id: slug }, // Handle ID passed as slug
-        include: {
-          categories: true,
-          schedules: true,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          licenseNumber: true,
+          phone: true,
+          specialization: true,
+          department: true,
+          imageUrl: true,
+          bio: true,
+          experience_years: true,
+          education: true,
+          certifications: true,
+          consultation_fee: true,
+          specialtyImage_url: true,
+          is_executive: true,
+          sip_number: true,
+          bpjs: true,
+          slug: true,
+          kd_dokter: true,
+          description: true,
+          isActive: true,
+          schedules: {
+            select: {
+              id: true,
+              dayOfWeek: true,
+              startTime: true,
+              endTime: true,
+            }
+          },
+          categories: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+            },
+          },
         }
       });
     }

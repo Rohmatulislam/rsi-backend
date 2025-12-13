@@ -6,6 +6,7 @@ import { DatabaseModule } from './infra/database/database.module';
 import { AppointmentModule } from './modules/appointment/appointment.module';
 import { ReminderModule } from './modules/reminder/reminder.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { AuthModule as AppAuthModule } from './modules/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '@thallesp/nestjs-better-auth';
 import { auth } from './infra/auth/auth';
@@ -26,6 +27,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     AppointmentModule,
     ReminderModule,
     AdminModule,
+    AppAuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

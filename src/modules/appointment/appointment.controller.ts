@@ -8,7 +8,7 @@ export class AppointmentController {
   constructor(private readonly appointmentService: AppointmentService) { }
 
   @Post()
-  @AllowAnonymous() // Allow public booking for now
+  @AllowAnonymous() // Allow public booking for now during development
   create(@Body() createAppointmentDto: CreateAppointmentDto) {
     return this.appointmentService.create(createAppointmentDto);
   }
@@ -23,7 +23,9 @@ export class AppointmentController {
     return this.appointmentService.getPatientHistory(patientId);
   }
 
+
   @Get()
+  @AllowAnonymous() // Allow to view all appointments for now
   getAllAppointments() {
     return this.appointmentService.getAllAppointments();
   }
