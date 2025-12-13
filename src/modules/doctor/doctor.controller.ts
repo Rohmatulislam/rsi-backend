@@ -22,6 +22,12 @@ import { GetDoctorsDto } from './dto/get-doctors.dto';
 export class DoctorController {
   constructor(private readonly doctorService: DoctorService) { }
 
+  @Get('active-poli')
+  @AllowAnonymous()
+  async getPoliklinikWithActiveSchedules() {
+    return await this.doctorService.getPoliklinikWithActiveSchedules();
+  }
+
   @Get()
   @AllowAnonymous()
   findAll(@Query() getDoctorsDto: GetDoctorsDto) {

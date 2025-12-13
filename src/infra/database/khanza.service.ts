@@ -40,6 +40,16 @@ export class KhanzaService implements OnModuleInit, OnModuleDestroy {
     return this.db('poliklinik').select('kd_poli', 'nm_poli');
   }
 
+  async getPoliklinikWithActiveSchedules() {
+    // Get poliklinik that have active schedules (not just 00:00:00 times)
+    return this.db('jadwal')
+      .select('poliklinik.kd_poli', 'poliklinik.nm_poli')
+      .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli')
+      .whereNot('jadwal.jam_mulai', '00:00:00')
+      .andWhereNot('jadwal.jam_selesai', '00:00:00')
+      .distinct();
+  }
+
   async getPoliByKdPoli(kdPoli: string) {
     return this.db('poliklinik').where('kd_poli', kdPoli).first();
   }
@@ -51,7 +61,47 @@ export class KhanzaService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getDoctorSchedules() {
-    return this.db('jadwal').select('*');
+    return this.db('jadwal')
+      .select('*')
+      .whereNot('jam_mulai', '00:00:00')
+      .andWhereNot('jam_selesai', '00:00:00');
+  }
+
+  async getDoctorSchedulesWithPoliInfo() {
+    // Join jadwal with poliklinik to get poli names
+    // Filter out schedules with jam_mulai and jam_selesai as 00:00:00
+    return this.db('jadwal')
+      .select(
+        'jadwal.kd_dokter',
+        'jadwal.kd_poli',
+        'jadwal.hari_kerja',
+        'jadwal.jam_mulai',
+        'jadwal.jam_selesai',
+        'jadwal.kuota',
+        'poliklinik.nm_poli'
+      )
+      .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli')
+      .whereNot('jadwal.jam_mulai', '00:00:00')
+      .andWhereNot('jadwal.jam_selesai', '00:00:00');
+  }
+
+  async getDoctorSchedulesByDoctorAndPoli(doctorCode: string) {
+    // Get doctor schedules with poli information
+    // Filter out schedules with jam_mulai and jam_selesai as 00:00:00
+    return this.db('jadwal')
+      .select(
+        'jadwal.kd_dokter',
+        'jadwal.kd_poli',
+        'jadwal.hari_kerja',
+        'jadwal.jam_mulai',
+        'jadwal.jam_selesai',
+        'jadwal.kuota',
+        'poliklinik.nm_poli'
+      )
+      .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli')
+      .where('jadwal.kd_dokter', doctorCode)
+      .whereNot('jadwal.jam_mulai', '00:00:00')
+      .andWhereNot('jadwal.jam_selesai', '00:00:00');
   }
 
   async getSpesialis() {

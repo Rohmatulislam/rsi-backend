@@ -51,6 +51,10 @@ export class DoctorService {
     return updatedDoctor;
   }
 
+  async getPoliklinikWithActiveSchedules() {
+    return await this.khanzaService.getPoliklinikWithActiveSchedules();
+  }
+
   async syncDoctors() {
     const kDoctors = await this.khanzaService.getDoctors();
     const kSchedules = await this.khanzaService.getDoctorSchedules();
@@ -161,7 +165,23 @@ export class DoctorService {
 
   async findAll(getDoctorsDto: GetDoctorsDto) {
     console.log('🔍 [FIND_ALL] Input DTO:', JSON.stringify(getDoctorsDto));
-    const where: any = {};
+
+    // Get all doctors from SIMRS Khanza
+    const kDoctors = await this.khanzaService.getDoctors();
+    const kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
+
+    // Filter doctors that have schedules
+    const doctorsWithSchedules = kDoctors.filter(kDoctor =>
+      kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
+    );
+
+    // Get corresponding doctor records from local database
+    const kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+
+    const where: any = {
+      kd_dokter: { in: kDoctorCodes }
+    };
+
     const isExecParam = getDoctorsDto.isExecutive;
     // Only filter if explicitly true
     if (isExecParam === true || String(isExecParam) === 'true') {
@@ -171,9 +191,9 @@ export class DoctorService {
 
     switch (getDoctorsDto.sort) {
       case DoctorSortBy.RECOMMENDED:
-        return this.getRecommendedDoctors(getDoctorsDto.limit);
+        return this.getRecommendedDoctorsWithSchedules(getDoctorsDto.limit, kSchedules);
       default:
-        return await this.prisma.doctor.findMany({
+        const doctors = await this.prisma.doctor.findMany({
           where,
           take: getDoctorsDto.limit,
           select: {
@@ -215,12 +235,44 @@ export class DoctorService {
             },
           },
         });
+
+        // Enhance doctors with schedule information from Khanza including poli info
+        const enhancedDoctors = doctors.map(doctor => {
+          const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
+          return {
+            ...doctor,
+            scheduleDetails: doctorSchedules.map(schedule => ({
+              kd_poli: schedule.kd_poli,
+              nm_poli: schedule.nm_poli,
+              hari_kerja: schedule.hari_kerja,
+              jam_mulai: schedule.jam_mulai,
+              jam_selesai: schedule.jam_selesai,
+              kuota: schedule.kuota,
+            }))
+          };
+        });
+
+        return enhancedDoctors;
     }
   }
 
   // TODO: Implement recommended doctors algorithm
   private async getRecommendedDoctors(limit: number) {
+    const kDoctors = await this.khanzaService.getDoctors();
+    const kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
+
+    // Filter doctors that have schedules
+    const doctorsWithSchedules = kDoctors.filter(kDoctor =>
+      kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
+    );
+
+    // Get corresponding doctor records from local database
+    const kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+
     const doctors = await this.prisma.doctor.findMany({
+      where: {
+        kd_dokter: { in: kDoctorCodes }
+      },
       take: limit,
       select: {
         id: true,
@@ -261,11 +313,103 @@ export class DoctorService {
       },
 
     });
-    return doctors;
+
+    // Enhance doctors with schedule information from Khanza including poli info
+    const enhancedDoctors = doctors.map(doctor => {
+      const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
+      return {
+        ...doctor,
+        scheduleDetails: doctorSchedules.map(schedule => ({
+          kd_poli: schedule.kd_poli,
+          nm_poli: schedule.nm_poli,
+          hari_kerja: schedule.hari_kerja,
+          jam_mulai: schedule.jam_mulai,
+          jam_selesai: schedule.jam_selesai,
+          kuota: schedule.kuota,
+        }))
+      };
+    });
+
+    return enhancedDoctors;
+  }
+
+  private async getRecommendedDoctorsWithSchedules(limit: number, kSchedules: any[]) {
+    const kDoctors = await this.khanzaService.getDoctors();
+
+    // Filter doctors that have schedules
+    const doctorsWithSchedules = kDoctors.filter(kDoctor =>
+      kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
+    );
+
+    // Get corresponding doctor records from local database
+    const kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+
+    const doctors = await this.prisma.doctor.findMany({
+      where: {
+        kd_dokter: { in: kDoctorCodes }
+      },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        licenseNumber: true,
+        phone: true,
+        specialization: true,
+        department: true,
+        imageUrl: true,
+        bio: true,
+        experience_years: true,
+        education: true,
+        certifications: true,
+        consultation_fee: true,
+        specialtyImage_url: true,
+        is_executive: true,
+        sip_number: true,
+        bpjs: true,
+        slug: true,
+        kd_dokter: true,
+        description: true,
+        isActive: true,
+        schedules: {
+          select: {
+            dayOfWeek: true,
+            startTime: true,
+            endTime: true,
+          }
+        },
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
+      },
+
+    });
+
+    // Enhance doctors with schedule information from Khanza including poli info
+    const enhancedDoctors = doctors.map(doctor => {
+      const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
+      return {
+        ...doctor,
+        scheduleDetails: doctorSchedules.map(schedule => ({
+          kd_poli: schedule.kd_poli,
+          nm_poli: schedule.nm_poli,
+          hari_kerja: schedule.hari_kerja,
+          jam_mulai: schedule.jam_mulai,
+          jam_selesai: schedule.jam_selesai,
+          kuota: schedule.kuota,
+        }))
+      };
+    });
+
+    return enhancedDoctors;
   }
 
   async findOne(id: string) {
-    return await this.prisma.doctor.findUnique({
+    const doctor = await this.prisma.doctor.findUnique({
       where: { id },
       select: {
         id: true,
@@ -289,8 +433,46 @@ export class DoctorService {
         kd_dokter: true,
         description: true,
         isActive: true,
+        schedules: {
+          select: {
+            id: true,
+            dayOfWeek: true,
+            startTime: true,
+            endTime: true,
+          }
+        },
+        categories: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+          },
+        },
       }
     });
+
+    if (doctor && doctor.kd_dokter) {
+      // Get schedule details from Khanza including poli information
+      const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
+
+      if (kSchedules && kSchedules.length > 0) {
+        const scheduleDetails = kSchedules.map(schedule => ({
+          kd_poli: schedule.kd_poli,
+          nm_poli: schedule.nm_poli,
+          hari_kerja: schedule.hari_kerja,
+          jam_mulai: schedule.jam_mulai,
+          jam_selesai: schedule.jam_selesai,
+          kuota: schedule.kuota,
+        }));
+
+        return {
+          ...doctor,
+          scheduleDetails
+        };
+      }
+    }
+
+    return doctor;
   }
 
   async update(id: string, updateDoctorDto: UpdateDoctorDto) {
@@ -385,8 +567,29 @@ export class DoctorService {
       }
     });
 
+    if (doctor && doctor.kd_dokter) {
+      // Get schedule details from Khanza including poli information
+      const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
+
+      if (kSchedules && kSchedules.length > 0) {
+        const scheduleDetails = kSchedules.map(schedule => ({
+          kd_poli: schedule.kd_poli,
+          nm_poli: schedule.nm_poli,
+          hari_kerja: schedule.hari_kerja,
+          jam_mulai: schedule.jam_mulai,
+          jam_selesai: schedule.jam_selesai,
+          kuota: schedule.kuota,
+        }));
+
+        return {
+          ...doctor,
+          scheduleDetails
+        };
+      }
+    }
+
     if (!doctor) {
-      return await this.prisma.doctor.findUnique({
+      const idBasedDoctor = await this.prisma.doctor.findUnique({
         where: { id: slug }, // Handle ID passed as slug
         select: {
           id: true,
@@ -427,6 +630,29 @@ export class DoctorService {
           },
         }
       });
+
+      if (idBasedDoctor && idBasedDoctor.kd_dokter) {
+        // Get schedule details from Khanza including poli information
+        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(idBasedDoctor.kd_dokter);
+
+        if (kSchedules && kSchedules.length > 0) {
+          const scheduleDetails = kSchedules.map(schedule => ({
+            kd_poli: schedule.kd_poli,
+            nm_poli: schedule.nm_poli,
+            hari_kerja: schedule.hari_kerja,
+            jam_mulai: schedule.jam_mulai,
+            jam_selesai: schedule.jam_selesai,
+            kuota: schedule.kuota,
+          }));
+
+          return {
+            ...idBasedDoctor,
+            scheduleDetails
+          };
+        }
+      }
+
+      return idBasedDoctor;
     }
 
     return doctor;
