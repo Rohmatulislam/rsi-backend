@@ -29,8 +29,7 @@ export class AppointmentService {
       const execPoli = availablePolis.find((poli: any) =>
         (poli.nm_poli.toLowerCase().includes('eksekutif') || poli.nm_poli.toLowerCase().includes('executive')) &&
         (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
-         poli.nm_poli.toLowerCase().includes('kandungan') || // sesuaikan dengan spesialisasi dokter
-         poli.nm_poli.toLowerCase().includes('obgyn')) // atau istilah lain yang digunakan
+         this.categoryMatchesDoctorSpecialty(categoryName, poli.nm_poli))
       );
 
       if (execPoli) {
@@ -40,11 +39,9 @@ export class AppointmentService {
       // Jika nama kategori mengandung kata 'Umum' atau 'PKS', cari poliklinik umum yang cocok
       const generalPoli = availablePolis.find((poli: any) =>
         (poli.nm_poli.toLowerCase().includes('umum') ||
-         poli.nm_poli.toLowerCase().includes('pks') ||
-         (poli.nm_poli.toLowerCase().includes('kandungan') &&
-          !poli.nm_poli.toLowerCase().includes('eksekutif'))) &&
+         poli.nm_poli.toLowerCase().includes('pks')) &&
          (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
-          poli.nm_poli.toLowerCase().includes('kandungan'))
+          this.categoryMatchesDoctorSpecialty(categoryName, poli.nm_poli))
       );
 
       if (generalPoli) {
@@ -63,6 +60,34 @@ export class AppointmentService {
 
     // Jika tidak ditemukan mapping, kembalikan poli default dokter
     return await this.khanzaService.findPoliByDoctor(doctorCode);
+  }
+
+  private categoryMatchesDoctorSpecialty(categoryName: string, poliName: string): boolean {
+    // Mapping umum antara nama kategori dokter dan nama poliklinik
+    const mappings: { [key: string]: string[] } = {
+      'penyakit dalam': ['penyakit dalam', 'internal', 'dalam'],
+      'kandungan': ['kandungan', 'obgyn', 'obstetri', 'ginekologi'],
+      'anak': ['anak', 'pediatri', 'paediatri'],
+      'jantung': ['jantung', 'cardio', 'kardiologi'],
+      'paru': ['paru', 'pulmo', 'paru-paru', 'respirasi'],
+      'saraf': ['saraf', 'neuro', 'neurologi'],
+      'bedah': ['bedah', 'surgery', 'bedah umum'],
+      'mata': ['mata', 'mata', 'ophthalmologi'],
+      'kulit': ['kulit', 'kulit dan kelamin', 'dermatologi', 'kulit & kelamin'],
+      'telinga': ['telinga', 'telinga hidung tenggorok', 'tHT', 'ent'],
+    };
+
+    const categoryLower = categoryName.toLowerCase();
+    const poliLower = poliName.toLowerCase();
+
+    for (const [specialty, keywords] of Object.entries(mappings)) {
+      if (categoryLower.includes(specialty) &&
+          keywords.some(keyword => poliLower.includes(keyword))) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   async create(createAppointmentDto: CreateAppointmentDto) {

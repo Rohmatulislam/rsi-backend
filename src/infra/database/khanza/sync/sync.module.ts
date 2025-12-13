@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Knex } from 'knex';
 
 export class SyncModule {
-  constructor(private db: Knex, private logger: Logger) {}
+  constructor(private db: Knex, private logger: Logger) { }
 
   async getDoctors() {
     // Select column yang relevan
@@ -29,7 +29,7 @@ export class SyncModule {
   }
 
   async getPaymentMethods() {
-    return await this.db('penjab').select('*');
+    return await this.db('penjab').select('kd_pj', 'png_jawab')
   }
 
   async getKabupatens() {

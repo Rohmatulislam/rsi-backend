@@ -34,7 +34,8 @@ export class KhanzaService implements OnModuleInit, OnModuleDestroy {
     await this.db.destroy();
   }
 
-  // --- Sync Data Methods ---
+
+  // --- Sync Data Methods (Required for Booking System) ---
   async getPoliklinik() {
     return this.db('poliklinik').select('kd_poli', 'nm_poli');
   }
@@ -61,6 +62,7 @@ export class KhanzaService implements OnModuleInit, OnModuleDestroy {
     return this.db('penjab').select('*');
   }
 
+  // --- Additional Reference Data Methods ---
   async getKabupatens() {
     return this.db('kabupaten').select('*');
   }
