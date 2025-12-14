@@ -10,22 +10,22 @@ export class ReminderService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationService: NotificationService,
-  ) {}
+  ) { }
 
   async onModuleInit() {
-    // Initialize reminder service when module starts
-    await this.sendReminders();
+    // Just log that service is ready, don't send reminders on startup
+    this.logger.log('ReminderService initialized - will run on schedule');
   }
 
-  @Cron(CronExpression.EVERY_HOUR) // Run every hour
+  @Cron(CronExpression.EVERY_DAY_AT_8AM) // Run once daily at 8 AM
   async sendReminders() {
-    this.logger.log('Sending appointment reminders');
+    this.logger.log('Running scheduled appointment reminders...');
 
     // Find appointments scheduled for tomorrow
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0); // Start of tomorrow
-    
+
     const dayAfterTomorrow = new Date();
     dayAfterTomorrow.setDate(tomorrow.getDate() + 1);
     dayAfterTomorrow.setHours(0, 0, 0, 0); // Start of the day after tomorrow
@@ -43,21 +43,41 @@ export class ReminderService implements OnModuleInit {
       },
     });
 
+    // Check which appointments already received reminders today
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
     for (const appointment of upcomingAppointments) {
       try {
+        // Check if reminder was already sent today for this appointment
+        const existingReminder = await this.prisma.notification.findFirst({
+          where: {
+            appointmentId: appointment.id,
+            type: 'BOOKING_REMINDER',
+            createdAt: {
+              gte: todayStart,
+            },
+          },
+        });
+
+        if (existingReminder) {
+          this.logger.log(`Reminder already sent today for appointment ${appointment.id}, skipping`);
+          continue;
+        }
+
         // Get doctor details for notification
         const doctorDetails = appointment.doctor;
 
         // Using the stored patient details from appointment record
         const notificationPayload: NotificationPayload = {
           patientName: appointment.patientName || 'Patient',
-          patientPhone: appointment.patientPhone || 'Patient Phone',
-          patientEmail: appointment.patientEmail || 'patient@example.com',
+          patientPhone: appointment.patientPhone || '',
+          patientEmail: appointment.patientEmail || '',
           bookingDate: appointment.appointmentDate.toLocaleDateString('id-ID'),
           bookingTime: appointment.appointmentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
           doctorName: doctorDetails.name,
-          bookingCode: appointment.notes || appointment.id, // Using notes as booking code since it contains no_reg
-          poliName: 'Poliklinik Umum', // Placeholder - in the future could fetch actual poli name
+          bookingCode: appointment.notes?.split(',')[0]?.replace('No Reg: ', '') || appointment.id,
+          poliName: 'Poliklinik',
         };
 
         // Send reminder notification
@@ -68,6 +88,8 @@ export class ReminderService implements OnModuleInit {
         this.logger.error(`Failed to send reminder for appointment ${appointment.id}: ${error.message}`);
       }
     }
+
+    this.logger.log(`Reminders processed for ${upcomingAppointments.length} appointments`);
   }
 
   // Method to send immediate reminder (useful for testing or manual sending)
