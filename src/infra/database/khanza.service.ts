@@ -60,6 +60,10 @@ export class KhanzaService implements OnModuleInit {
     return this.bookingService.cancelBooking(noRawat);
   }
 
+  async updateBookingDate(noRawat: string, newDate: string) {
+    return this.bookingService.updateBookingDate(noRawat, newDate);
+  }
+
   async getBookingByNoRawat(noRawat: string) {
     return this.bookingService.getBookingByNoRawat(noRawat);
   }

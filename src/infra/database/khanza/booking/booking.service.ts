@@ -107,26 +107,68 @@ export class BookingService {
 
   async cancelBooking(noRawat: string) {
     try {
+      this.logger.log(`Attempting to cancel booking in Khanza: ${noRawat}`);
+
       // Update status booking in reg_periksa to show it's cancelled
+      // Note: status_bayar has limited length, using shorter value
       const result = await this.dbService.db('reg_periksa')
         .where('no_rawat', noRawat)
         .update({
-          stts: 'Batal',
-          status_bayar: 'Batal'
+          stts: 'Batal'
+          // status_bayar tidak di-update karena limitasi column length di Khanza
         });
 
       if (result > 0) {
-        this.logger.log(`Booking Cancelled: ${noRawat}`);
+        this.logger.log(`Booking Cancelled in Khanza: ${noRawat}`);
         return {
           success: true,
           message: 'Booking cancelled successfully in SIMRS',
           no_rawat: noRawat
         };
       } else {
+        this.logger.warn(`Booking not found in Khanza: ${noRawat}`);
         throw new Error('Booking not found in SIMRS');
       }
     } catch (e) {
       this.logger.error('Error cancelling booking in SIMRS', e);
+      throw e;
+    }
+  }
+
+  async updateBookingDate(noRawat: string, newDate: string) {
+    try {
+      this.logger.log(`Attempting to reschedule booking in Khanza: ${noRawat} to ${newDate}`);
+
+      // Check if booking exists
+      const existingBooking = await this.dbService.db('reg_periksa')
+        .where('no_rawat', noRawat)
+        .first();
+
+      if (!existingBooking) {
+        this.logger.warn(`Booking not found in Khanza: ${noRawat}`);
+        throw new Error('Booking not found in SIMRS');
+      }
+
+      // Update the registration date
+      const result = await this.dbService.db('reg_periksa')
+        .where('no_rawat', noRawat)
+        .update({
+          tgl_registrasi: newDate
+        });
+
+      if (result > 0) {
+        this.logger.log(`Booking Rescheduled in Khanza: ${noRawat} to ${newDate}`);
+        return {
+          success: true,
+          message: 'Booking rescheduled successfully in SIMRS',
+          no_rawat: noRawat,
+          new_date: newDate
+        };
+      } else {
+        throw new Error('Failed to update booking date in SIMRS');
+      }
+    } catch (e) {
+      this.logger.error('Error rescheduling booking in SIMRS', e);
       throw e;
     }
   }

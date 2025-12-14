@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
+import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { KhanzaService } from '../../infra/database/khanza.service';
 import { PrismaService } from '../../infra/database/prisma.service';
 import { NotificationService, NotificationPayload } from '../notification/notification.service';
@@ -295,79 +296,94 @@ export class AppointmentService {
   async cancel(appointmentId: string) {
     this.logger.log(`Cancelling appointment ${appointmentId}`);
 
-    // Find the appointment
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      include: {
-        doctor: {
-          select: {
-            name: true
+    try {
+      // Find the appointment
+      const appointment = await this.prisma.appointment.findUnique({
+        where: { id: appointmentId },
+        include: {
+          doctor: {
+            select: {
+              name: true
+            }
           }
         }
-      }
-    });
-
-    if (!appointment) {
-      throw new BadRequestException('Appointment not found');
-    }
-
-    // Extract no_rawat from appointment notes (stored as "No Reg: X, No Rawat: Y")
-    let noRawat = '';
-    if (appointment.notes) {
-      const rawatMatch = appointment.notes.match(/No Rawat: (\w+)/);
-      if (rawatMatch) {
-        noRawat = rawatMatch[1];
-      }
-    }
-
-    // Cancel in SIMRS Khanza if we have no_rawat
-    if (noRawat) {
-      try {
-        await this.khanzaService.cancelBooking(noRawat);
-        this.logger.log(`Booking cancelled in SIMRS for no_rawat: ${noRawat}`);
-      } catch (simrsError) {
-        this.logger.error(`Failed to cancel booking in SIMRS for no_rawat: ${noRawat}`, simrsError);
-        // Don't fail the local cancellation if SIMRS cancellation fails
-      }
-    }
-
-    // Update appointment status to cancelled
-    const updatedAppointment = await this.prisma.appointment.update({
-      where: { id: appointmentId },
-      data: { status: 'cancelled' }
-    });
-
-    // Send cancellation notification
-    try {
-      // Get doctor details for notification
-      const doctorDetails = await this.prisma.doctor.findFirst({
-        where: { id: appointment.doctorId },
-        select: { name: true }
       });
 
-      // Prepare notification payload using stored patient data
-      const notificationPayload: NotificationPayload = {
-        patientName: appointment.patientName || 'Patient',
-        patientPhone: appointment.patientPhone || 'Patient Phone',
-        patientEmail: appointment.patientEmail || 'patient@example.com',
-        bookingDate: appointment.appointmentDate.toLocaleDateString('id-ID'),
-        bookingTime: appointment.appointmentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        doctorName: doctorDetails?.name || 'Unknown Doctor',
-        bookingCode: appointment.notes || appointmentId, // Using notes as booking code since it contains no_reg
-        poliName: 'Poliklinik Umum', // Placeholder
+      if (!appointment) {
+        this.logger.error(`Appointment not found: ${appointmentId}`);
+        throw new BadRequestException('Appointment not found');
+      }
+
+      this.logger.log(`Found appointment: ${appointment.id}, status: ${appointment.status}`);
+
+      // Check if already cancelled
+      if (appointment.status === 'cancelled' || appointment.status === 'CANCELLED') {
+        this.logger.warn(`Appointment ${appointmentId} already cancelled`);
+        throw new BadRequestException('Appointment sudah dibatalkan sebelumnya');
+      }
+
+      // Extract no_rawat from appointment notes (stored as "No Reg: X, No Rawat: Y")
+      let noRawat = '';
+      if (appointment.notes) {
+        const rawatMatch = appointment.notes.match(/No Rawat: ([^\s,]+)/);
+        if (rawatMatch) {
+          noRawat = rawatMatch[1];
+        }
+      }
+
+      // Cancel in SIMRS Khanza if we have no_rawat
+      if (noRawat) {
+        try {
+          await this.khanzaService.cancelBooking(noRawat);
+          this.logger.log(`Booking cancelled in SIMRS for no_rawat: ${noRawat}`);
+        } catch (simrsError) {
+          this.logger.error(`Failed to cancel booking in SIMRS for no_rawat: ${noRawat}`, simrsError);
+          // Don't fail the local cancellation if SIMRS cancellation fails
+        }
+      }
+
+      // Update appointment status to cancelled
+      const updatedAppointment = await this.prisma.appointment.update({
+        where: { id: appointmentId },
+        data: { status: 'cancelled' }
+      });
+
+      this.logger.log(`Appointment ${appointmentId} cancelled successfully`);
+
+      // Send cancellation notification (optional, don't fail if this fails)
+      try {
+        const doctorDetails = await this.prisma.doctor.findFirst({
+          where: { id: appointment.doctorId },
+          select: { name: true }
+        });
+
+        const notificationPayload: NotificationPayload = {
+          patientName: appointment.patientName || 'Patient',
+          patientPhone: appointment.patientPhone || '',
+          patientEmail: appointment.patientEmail || '',
+          bookingDate: appointment.appointmentDate.toLocaleDateString('id-ID'),
+          bookingTime: appointment.appointmentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          doctorName: doctorDetails?.name || 'Unknown Doctor',
+          bookingCode: appointment.notes || appointmentId,
+          poliName: 'Poliklinik Umum',
+        };
+
+        await this.notificationService.sendBookingCancellation(notificationPayload, appointment.id);
+      } catch (notificationError) {
+        this.logger.error('Failed to send cancellation notification', notificationError);
+      }
+
+      return {
+        success: true,
+        message: 'Appointment cancelled successfully'
       };
-
-      // Send notification
-      await this.notificationService.sendBookingCancellation(notificationPayload, appointment.id);
-    } catch (notificationError) {
-      this.logger.error('Failed to send cancellation notification', notificationError);
-      // Don't fail the cancellation if notification fails
+    } catch (error) {
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      this.logger.error(`Unexpected error cancelling appointment ${appointmentId}:`, error);
+      throw new BadRequestException(`Gagal membatalkan appointment: ${error.message}`);
     }
-
-    return {
-      success: true,
-      message: 'Appointment cancelled successfully'
-    };
   }
 
   async getPatientHistory(patientId: string) {
@@ -570,6 +586,134 @@ export class AppointmentService {
       totalPatients: patientsMap.size,
       totalAppointments: appointments.length,
       patients: Array.from(patientsMap.values())
+    };
+  }
+
+  /**
+   * Reschedule an existing appointment to a new date/time
+   */
+  async reschedule(appointmentId: string, rescheduleDto: RescheduleAppointmentDto) {
+    this.logger.log(`Rescheduling appointment ${appointmentId}`);
+
+    // Find the appointment
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: {
+        doctor: {
+          select: {
+            id: true,
+            name: true,
+            kd_dokter: true
+          }
+        }
+      }
+    });
+
+    if (!appointment) {
+      throw new BadRequestException('Appointment not found');
+    }
+
+    // Check if appointment is still active
+    if (appointment.status === 'cancelled' || appointment.status === 'completed') {
+      throw new BadRequestException('Cannot reschedule a cancelled or completed appointment');
+    }
+
+    // Validate new date is not in the past
+    const newDate = new Date(rescheduleDto.newDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (newDate < today) {
+      throw new BadRequestException('Tanggal baru tidak boleh di masa lalu');
+    }
+
+    const dateString = newDate.toISOString().split('T')[0];
+
+    // Check doctor availability for new date (optional - don't block reschedule if check fails)
+    if (appointment.doctor.kd_dokter) {
+      try {
+        const availability = await this.khanzaService.isDoctorAvailable(appointment.doctor.kd_dokter, dateString);
+        if (!availability.available) {
+          this.logger.warn(`Doctor ${appointment.doctor.kd_dokter} may not be available on ${dateString}: ${availability.reason}`);
+          // Don't block - just warn. User may know better about schedule.
+        }
+      } catch (availabilityError) {
+        this.logger.warn(`Could not check doctor availability: ${availabilityError.message}`);
+        // Continue with reschedule
+      }
+    }
+
+    // Create new appointment date time
+    let newAppointmentDate = newDate;
+    if (rescheduleDto.newTime) {
+      const [hours, minutes] = rescheduleDto.newTime.split(':').map(Number);
+      newAppointmentDate = new Date(newDate);
+      newAppointmentDate.setHours(hours, minutes, 0, 0);
+    }
+
+    // Extract no_rawat from appointment notes and update in Khanza
+    let noRawat = '';
+    if (appointment.notes) {
+      // Format: "No Reg: 001, No Rawat: 2024/12/15/000001"
+      const rawatMatch = appointment.notes.match(/No Rawat:\s*([^\s,|]+)/);
+      if (rawatMatch) {
+        noRawat = rawatMatch[1].trim();
+      }
+    }
+
+    // Sync reschedule to SIMRS Khanza
+    if (noRawat) {
+      try {
+        await this.khanzaService.updateBookingDate(noRawat, dateString);
+        this.logger.log(`Booking rescheduled in Khanza for no_rawat: ${noRawat}`);
+      } catch (khanzaError) {
+        this.logger.error(`Failed to reschedule in Khanza for no_rawat: ${noRawat}`, khanzaError);
+        // Don't fail local reschedule if Khanza sync fails
+      }
+    } else {
+      this.logger.warn(`No no_rawat found in appointment notes, cannot sync to Khanza`);
+    }
+
+    // Update the appointment in local database
+    const updatedAppointment = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: {
+        appointmentDate: newAppointmentDate,
+        notes: appointment.notes ? `${appointment.notes} | Rescheduled from ${appointment.appointmentDate.toLocaleDateString('id-ID')}` : undefined
+      },
+      include: {
+        doctor: {
+          select: {
+            name: true
+          }
+        }
+      }
+    });
+
+    // Send reschedule notification
+    try {
+      const notificationPayload: NotificationPayload = {
+        patientName: appointment.patientName || 'Patient',
+        patientPhone: appointment.patientPhone || '',
+        patientEmail: appointment.patientEmail || '',
+        bookingDate: newAppointmentDate.toLocaleDateString('id-ID'),
+        bookingTime: newAppointmentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        doctorName: updatedAppointment.doctor?.name || 'Unknown Doctor',
+        bookingCode: appointment.notes?.split(',')[0]?.replace('No Reg: ', '') || appointmentId,
+        poliName: 'Poliklinik',
+      };
+
+      // Send notification about reschedule
+      await this.notificationService.sendBookingConfirmation(notificationPayload, appointment.id);
+    } catch (notificationError) {
+      this.logger.error('Failed to send reschedule notification', notificationError);
+    }
+
+    return {
+      success: true,
+      message: 'Jadwal berhasil diubah',
+      newDate: newAppointmentDate.toLocaleDateString('id-ID'),
+      newTime: newAppointmentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
     };
   }
 
