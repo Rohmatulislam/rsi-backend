@@ -1,56 +1,50 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger, Inject } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import knex, { Knex } from 'knex';
+import { Knex } from 'knex';
 import { BookingService } from './khanza/booking/booking.service';
 import { PatientService } from './khanza/patient/patient.service';
 import { PoliklinikService } from './khanza/sync/poliklinik.service';
 import { DokterService } from './khanza/sync/dokter.service';
 import { ValidationService } from './khanza/validation/validation.service';
 import { MonitoringService } from './khanza/monitoring/monitoring.service';
+import { KhanzaDBService } from './khanza/khanza-db.service';
 
 @Injectable()
-export class KhanzaService implements OnModuleInit, OnModuleDestroy {
+export class KhanzaService implements OnModuleInit {
   private readonly logger = new Logger(KhanzaService.name);
-  public db: Knex;
 
-  // Inject all specialized services
+  // Gunakan koneksi dari KhanzaDBService, bukan buat sendiri
+  public get db(): Knex {
+    return this.dbService.db;
+  }
+
+  // Inject all specialized services + KhanzaDBService
   constructor(
     private configService: ConfigService,
+    private readonly dbService: KhanzaDBService, // Inject KhanzaDBService
     public readonly bookingService: BookingService,
     public readonly patientService: PatientService,
     public readonly poliklinikService: PoliklinikService,
     public readonly dokterService: DokterService,
     public readonly validationService: ValidationService,
     public readonly monitoringService: MonitoringService,
-  ) {
-    this.db = knex({
-      client: 'mysql2',
-      connection: {
-        host: this.configService.get<string>('KHANZA_DB_HOST', 'localhost'),
-        port: this.configService.get<number>('KHANZA_DB_PORT', 3306),
-        user: this.configService.get<string>('KHANZA_DB_USER', 'root'),
-        password: this.configService.get<string>('KHANZA_DB_PASSWORD', ''),
-        database: this.configService.get<string>('KHANZA_DB_NAME', 'sik'),
-      },
-      pool: { min: 0, max: 7 },
-    });
-  }
+  ) { }
 
   async onModuleInit() {
     try {
-      await this.db.raw('SELECT 1');
-      this.logger.log('Successfully connected to Khanza SIMRS Database');
+      const isConnected = await this.dbService.testConnection();
+      if (isConnected) {
+        this.logger.log('✅ Successfully connected to Khanza SIMRS Database (via KhanzaDBService)');
+      } else {
+        this.logger.error('❌ Failed to connect to Khanza SIMRS Database');
+      }
     } catch (error) {
-      this.logger.error('Failed to connect to Khanza SIMRS Database', error);
+      this.logger.error('❌ Failed to connect to Khanza SIMRS Database', error);
     }
   }
 
-  async onModuleDestroy() {
-    await this.db.destroy();
-  }
-
   // --- Convenience Methods (Delegating to specialized services) ---
-  
+
   // Booking methods
   async createBooking(data: {
     doctorCode: string;
