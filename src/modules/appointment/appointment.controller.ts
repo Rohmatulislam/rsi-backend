@@ -35,4 +35,9 @@ export class AppointmentController {
   searchPatientByRM(@Param('mrNumber') mrNumber: string) {
     return this.appointmentService.searchPatientByRM(mrNumber);
   }
+
+  @Get('my-patients/:userId')
+  getByUserId(@Param('userId') userId: string) {
+    return this.appointmentService.getByUserId(userId);
+  }
 }

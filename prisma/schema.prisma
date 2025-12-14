@@ -89,10 +89,12 @@ model Appointment {
   status          String   @default("scheduled") // scheduled, confirmed, completed, cancelled
   reason          String?
   notes           String?
+  createdByUserId String?  // User yang membuat booking (opsional untuk backward compatibility)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  doctor       Doctor        @relation(fields: [doctorId], references: [id])
+  doctor        Doctor        @relation(fields: [doctorId], references: [id])
+  createdByUser User?         @relation("UserAppointments", fields: [createdByUserId], references: [id])
   notifications Notification[]
 }
 
@@ -110,16 +112,29 @@ model Schedule {
   doctor Doctor @relation(fields: [doctorId], references: [id])
 }
 
+// User roles for RBAC (reference only, stored as String for Better-Auth compatibility)
+// Valid values: ADMIN, DOCTOR, NURSE, STAFF, PATIENT
+// enum UserRole {
+//   ADMIN     // Administrator - full access
+//   DOCTOR    // Dokter - akses appointment, schedule
+//   NURSE     // Perawat - akses appointment
+//   STAFF     // Staff administratif
+//   PATIENT   // Pasien - akses booking, riwayat
+// }
+
+
 model User {
-  id            String    @id
+  id            String        @id
   name          String
   email         String
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean       @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  role          String        @default("PATIENT") // ADMIN, DOCTOR, NURSE, STAFF, PATIENT
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
   sessions      Session[]
   accounts      Account[]
+  appointments  Appointment[] @relation("UserAppointments") // Booking yang dibuat oleh user ini
 
   @@unique([email])
   @@map("user")

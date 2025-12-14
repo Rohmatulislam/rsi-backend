@@ -73,4 +73,8 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   poliId?: string; // ID poliklinik yang dipilih
+
+  @IsOptional()
+  @IsString()
+  createdByUserId?: string; // ID user yang membuat booking (untuk tracking)
 }

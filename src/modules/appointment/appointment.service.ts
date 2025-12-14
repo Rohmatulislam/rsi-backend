@@ -241,7 +241,8 @@ export class AppointmentService {
           patientName: finalPatientName,
           patientPhone: finalPatientPhone,
           patientEmail: finalPatientEmail,
-          patientAddress: finalPatientAddress
+          patientAddress: finalPatientAddress,
+          createdByUserId: createAppointmentDto.createdByUserId || null
         }
       });
 
@@ -494,6 +495,82 @@ export class AppointmentService {
       this.logger.error(`❌ [SEARCH] Error stack:`, error.stack);
       throw new BadRequestException('Gagal mencari data pasien');
     }
+  }
+
+  /**
+   * Get all appointments created by a specific user
+   * Returns list of patients registered by this user
+   */
+  async getByUserId(userId: string) {
+    this.logger.log(`Fetching appointments created by user ${userId}`);
+
+    const appointments = await this.prisma.appointment.findMany({
+      where: {
+        createdByUserId: userId
+      },
+      include: {
+        doctor: {
+          select: {
+            name: true,
+            specialization: true,
+            imageUrl: true
+          }
+        }
+      },
+      orderBy: {
+        appointmentDate: 'desc'
+      }
+    });
+
+    // Group by patientId to get unique patients
+    const patientsMap = new Map<string, {
+      patientId: string;
+      patientName: string;
+      patientPhone: string;
+      patientEmail: string;
+      appointmentsCount: number;
+      lastAppointment: Date;
+      appointments: any[];
+    }>();
+
+    appointments.forEach(appointment => {
+      const existing = patientsMap.get(appointment.patientId);
+      if (existing) {
+        existing.appointmentsCount++;
+        existing.appointments.push({
+          id: appointment.id,
+          appointmentDate: appointment.appointmentDate,
+          status: appointment.status,
+          doctor: appointment.doctor,
+          notes: appointment.notes
+        });
+        if (appointment.appointmentDate > existing.lastAppointment) {
+          existing.lastAppointment = appointment.appointmentDate;
+        }
+      } else {
+        patientsMap.set(appointment.patientId, {
+          patientId: appointment.patientId,
+          patientName: appointment.patientName || 'Unknown',
+          patientPhone: appointment.patientPhone || '',
+          patientEmail: appointment.patientEmail || '',
+          appointmentsCount: 1,
+          lastAppointment: appointment.appointmentDate,
+          appointments: [{
+            id: appointment.id,
+            appointmentDate: appointment.appointmentDate,
+            status: appointment.status,
+            doctor: appointment.doctor,
+            notes: appointment.notes
+          }]
+        });
+      }
+    });
+
+    return {
+      totalPatients: patientsMap.size,
+      totalAppointments: appointments.length,
+      patients: Array.from(patientsMap.values())
+    };
   }
 
 }
