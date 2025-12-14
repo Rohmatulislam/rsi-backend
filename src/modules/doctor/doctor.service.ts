@@ -55,6 +55,10 @@ export class DoctorService {
     return await this.khanzaService.getPoliklinikWithActiveSchedules();
   }
 
+  async getPaymentMethods() {
+    return await this.khanzaService.getPaymentMethods();
+  }
+
   async syncDoctors() {
     const kDoctors = await this.khanzaService.getDoctors();
     const kSchedules = await this.khanzaService.getDoctorSchedules();

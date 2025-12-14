@@ -29,7 +29,7 @@ export class AppointmentService {
       const execPoli = availablePolis.find((poli: any) =>
         (poli.nm_poli.toLowerCase().includes('eksekutif') || poli.nm_poli.toLowerCase().includes('executive')) &&
         (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
-         this.categoryMatchesDoctorSpecialty(categoryName, poli.nm_poli))
+          this.categoryMatchesDoctorSpecialty(categoryName, poli.nm_poli))
       );
 
       if (execPoli) {
@@ -39,8 +39,8 @@ export class AppointmentService {
       // Jika nama kategori mengandung kata 'Umum' atau 'PKS', cari poliklinik umum yang cocok
       const generalPoli = availablePolis.find((poli: any) =>
         (poli.nm_poli.toLowerCase().includes('umum') ||
-         poli.nm_poli.toLowerCase().includes('pks')) &&
-         (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
+          poli.nm_poli.toLowerCase().includes('pks')) &&
+        (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
           this.categoryMatchesDoctorSpecialty(categoryName, poli.nm_poli))
       );
 
@@ -82,7 +82,7 @@ export class AppointmentService {
 
     for (const [specialty, keywords] of Object.entries(mappings)) {
       if (categoryLower.includes(specialty) &&
-          keywords.some(keyword => poliLower.includes(keyword))) {
+        keywords.some(keyword => poliLower.includes(keyword))) {
         return true;
       }
     }
@@ -184,23 +184,24 @@ export class AppointmentService {
     // Lookup Poli
     let poliCode = '';
 
-    // Jika poliId disediakan dari frontend, cari informasi kode poli yang sesuai
+    // poliId dari frontend sudah berisi kd_poli dari SIMRS Khanza (misalnya "U0021")
+    // Kita gunakan langsung, karena frontend sudah mengambil dari API getActivePoli
     if (createAppointmentDto.poliId) {
-      // Kita perlu mengambil informasi kode poli berdasarkan ID kategori
-      const selectedCategory = await this.prisma.category.findUnique({
-        where: { id: createAppointmentDto.poliId }
-      });
+      // Validasi bahwa kode poli valid dengan mengecek ke Khanza
+      const poliDetails = await this.khanzaService.getPoliByKdPoli(createAppointmentDto.poliId);
 
-      if (selectedCategory) {
-        // Ambil kode poli dari field slug atau cari mapping ke kode poli Khanza
-        // Kita perlu mapping berdasarkan nama kategori ke kode poli Khanza
-        poliCode = await this.mapCategoryToKhanzaPoli(selectedCategory.name, doctor.kd_dokter);
+      if (poliDetails) {
+        poliCode = createAppointmentDto.poliId;
+        this.logger.log(`✅ Poli from frontend validated: ${poliCode} - ${poliDetails.nm_poli}`);
+      } else {
+        this.logger.warn(`⚠️ Poli code ${createAppointmentDto.poliId} not found in Khanza, using doctor's default poli`);
       }
     }
 
-    // Fallback: gunakan poli default dokter jika tidak ada pilihan spesifik
+    // Fallback: gunakan poli default dokter jika tidak ada pilihan spesifik atau tidak valid
     if (!poliCode) {
       poliCode = await this.khanzaService.findPoliByDoctor(doctor.kd_dokter);
+      this.logger.log(`📋 Using doctor's default poli: ${poliCode}`);
     }
 
     // 2. Insert ke Reg Periksa (Bridging Real)

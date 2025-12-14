@@ -28,6 +28,12 @@ export class DoctorController {
     return await this.doctorService.getPoliklinikWithActiveSchedules();
   }
 
+  @Get('payment-methods')
+  @AllowAnonymous()
+  async getPaymentMethods() {
+    return await this.doctorService.getPaymentMethods();
+  }
+
   @Get()
   @AllowAnonymous()
   findAll(@Query() getDoctorsDto: GetDoctorsDto) {

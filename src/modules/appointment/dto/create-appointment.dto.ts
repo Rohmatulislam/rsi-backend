@@ -51,7 +51,7 @@ export class CreateAppointmentDto {
 
   @IsNotEmpty()
   @IsString()
-  paymentType: 'umum' | 'bpjs';
+  paymentType: string; // kd_pj dari Khanza (misalnya: "A01", "BPJ", dll)
 
   @IsOptional()
   @IsString()
