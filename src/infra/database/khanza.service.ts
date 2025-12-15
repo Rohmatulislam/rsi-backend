@@ -116,6 +116,9 @@ export class KhanzaService implements OnModuleInit {
     maritalStatus?: string; // BELUM MENIKAH/MENIKAH/JANDA/DUDA
     religion?: string; // ISLAM/KRISTEN/KATOLIK/HINDU/BUDDHA/KONGHUCU
     occupation?: string;
+    bpjsNumber?: string; // No. BPJS untuk disimpan ke no_peserta
+    penanggungJawab?: string; // Nama penanggung jawab
+    hubunganPenanggungJawab?: string; // Hubungan dengan pasien
   }) {
     return this.patientService.createPatient(data);
   }

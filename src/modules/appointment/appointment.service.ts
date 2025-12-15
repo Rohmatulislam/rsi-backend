@@ -158,6 +158,7 @@ export class AppointmentService {
               address: createAppointmentDto.patientAddress || '-',
               phone: createAppointmentDto.patientPhone,
               email: createAppointmentDto.patientEmail,
+              bpjsNumber: createAppointmentDto.bpjsNumber, // No. BPJS untuk saved ke no_peserta
             });
 
             // Fetch the newly created patient
@@ -504,6 +505,7 @@ export class AppointmentService {
           no_tlp: patient.no_tlp,
           alamat: patient.alamat,
           email: patient.email,
+          no_peserta: patient.no_peserta || '', // No. BPJS
         }
       };
     } catch (error) {

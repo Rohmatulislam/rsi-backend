@@ -48,6 +48,9 @@ export class PatientService {
     maritalStatus?: string; // BELUM MENIKAH/MENIKAH/JANDA/DUDA
     religion?: string; // ISLAM/KRISTEN/KATOLIK/HINDU/BUDDHA/KONGHUCU
     occupation?: string;
+    bpjsNumber?: string; // No. BPJS untuk disimpan ke no_peserta
+    penanggungJawab?: string; // Nama penanggung jawab
+    hubunganPenanggungJawab?: string; // Hubungan dengan pasien
   }) {
     try {
       const noRM = await this.getNextNoRM();
@@ -192,7 +195,7 @@ export class PatientService {
         keluarga: 'DIRI SENDIRI',
         namakeluarga: data.name,
         kd_pj: defaultPaymentCode, // Gunakan kode penjamin yang valid dari tabel penjab
-        no_peserta: '',
+        no_peserta: data.bpjsNumber || '', // No. BPJS
         kd_kab: defaultKabCode, // Integer field, gunakan kode referensi yang valid
         kd_kel: defaultKelCode, // Integer field, gunakan kode referensi yang valid
         kd_kec: defaultKecCode, // Integer field, gunakan kode referensi yang valid
@@ -324,7 +327,15 @@ export class PatientService {
 
   // Additional patient reference data methods
   async getPaymentMethods() {
-    return this.dbService.db('penjab').select('*');
+    try {
+      // Try to get payment methods with status filter if column exists
+      return await this.dbService.db('penjab')
+        .select('kd_pj', 'png_jawab')
+        .orderBy('png_jawab', 'asc');
+    } catch (error) {
+      this.logger.error('Error fetching payment methods:', error);
+      return [];
+    }
   }
 
   async getKabupatens() {
