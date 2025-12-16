@@ -135,9 +135,44 @@ model User {
   sessions      Session[]
   accounts      Account[]
   appointments  Appointment[] @relation("UserAppointments") // Booking yang dibuat oleh user ini
+  profile       UserProfile?
+  familyMembers FamilyMember[]
 
   @@unique([email])
   @@map("user")
+}
+
+model UserProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phone     String?
+  address   String?
+  birthDate DateTime?
+  gender    String?  // "L" | "P"
+  nik       String?
+  bloodType String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_profile")
+}
+
+model FamilyMember {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  relationship String    // "spouse", "child", "parent", "sibling", "other"
+  nik          String?
+  birthDate    DateTime?
+  gender       String?   // "L" | "P"
+  phone        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("family_member")
 }
 
 model Session {

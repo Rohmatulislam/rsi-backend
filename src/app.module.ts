@@ -13,6 +13,7 @@ import { auth } from './infra/auth/auth';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ArticleModule } from './modules/article/articles.module';
 import { AboutModule } from './modules/about/about.module';
+import { UserModule } from './modules/user/user.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AboutModule } from './modules/about/about.module';
     AppAuthModule,
     ArticleModule,
     AboutModule,
+    UserModule,
   ],
   controllers: [AppController],
   providers: [AppService],
