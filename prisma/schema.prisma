@@ -248,3 +248,50 @@ model Notification {
 
   appointment Appointment? @relation(fields: [appointmentId], references: [id])
 }
+
+model Founder {
+  id          String   @id @default(cuid())
+  name        String   // Nama lengkap pendiri
+  role        String   // Jabatan/peran pendiri
+  description String?  @db.Text // Deskripsi kontribusi (opsional)
+  image       String?  // Path gambar hasil upload
+  badge       String?  // Label badge (e.g., PENDIRI)
+  order       Int      @default(0) // Urutan tampilan
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  year        String   // Tahun kejadian
+  title       String   // Judul milestone
+  description String   @db.Text // Deskripsi detail
+  icon        String?  // Nama icon Lucide
+  highlight   Boolean  @default(false) // Milestone penting
+  order       Int      @default(0) // Urutan tampilan
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AboutContent {
+  id        String   @id @default(cuid())
+  key       String   @unique // "history", "vision", "mission"
+  value     String   @db.Text // Konten teks atau JSON array untuk misi
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CoreValue {
+  id          String   @id @default(cuid())
+  title       String   // Judul nilai (Ikhlas, Profesional, dll)
+  description String   // Deskripsi nilai
+  icon        String   // Nama icon Lucide (Heart, CheckCircle2, dll)
+  order       Int      @default(0) // Urutan tampilan
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+

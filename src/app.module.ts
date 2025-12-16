@@ -11,6 +11,8 @@ import { ConfigModule } from '@nestjs/config';
 import { AuthModule } from '@thallesp/nestjs-better-auth';
 import { auth } from './infra/auth/auth';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ArticleModule } from './modules/article/articles.module';
+import { AboutModule } from './modules/about/about.module';
 
 @Module({
   imports: [
@@ -28,8 +30,11 @@ import { ScheduleModule } from '@nestjs/schedule';
     ReminderModule,
     AdminModule,
     AppAuthModule,
+    ArticleModule,
+    AboutModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
+
