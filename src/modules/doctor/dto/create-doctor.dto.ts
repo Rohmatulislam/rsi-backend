@@ -30,8 +30,8 @@ export class CreateDoctorDto {
   @IsOptional()
   bio?: string;
 
-  @IsInt()
   @IsOptional()
+  @IsInt()
   experience_years?: number;
 
   @IsString()
@@ -42,8 +42,8 @@ export class CreateDoctorDto {
   @IsOptional()
   certifications?: string;
 
-  @IsNumber()
   @IsOptional()
+  @IsNumber()
   consultation_fee?: number;
 
   @IsString()
