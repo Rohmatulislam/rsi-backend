@@ -495,9 +495,16 @@ export class DoctorService {
       }
     }
 
+    // Handle Base64 image in imageUrl if present
+    const dataToUpdate = { ...updateDoctorDto };
+    if (updateDoctorDto.imageUrl && updateDoctorDto.imageUrl.startsWith('data:image')) {
+      const updated = await this.updateDoctorImage(id, updateDoctorDto.imageUrl);
+      dataToUpdate.imageUrl = updated.imageUrl;
+    }
+
     return await this.prisma.doctor.update({
       where: { id },
-      data: updateDoctorDto,
+      data: dataToUpdate,
     });
   }
 
