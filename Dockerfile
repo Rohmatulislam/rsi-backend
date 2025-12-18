@@ -47,8 +47,8 @@ COPY --from=builder /app/start.sh ./start.sh
 # Setup start script
 RUN chmod +x start.sh
 
-# Expose port
-EXPOSE 2000
+# Expose port (Railway uses 8080 by default)
+EXPOSE 8080
 
 # Start with tailscale
 CMD ["./start.sh"]
