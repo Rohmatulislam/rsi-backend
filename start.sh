@@ -15,10 +15,10 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     # Tunggu koneksi stabil
     sleep 5
     
-    # Jembatan lokal (socat): Menghubungkan localhost:3307 ke database RS melalui Tailscale SOCKS5
-    echo "Starting socat bridge: localhost:3307 -> 100.73.168.57:3306 (via SOCKS5:1055)"
-    # Kita menggunakan format yang benar untuk socat socks5
-    socat TCP-LISTEN:3307,fork,reuseaddr SOCKS5:127.0.0.1:100.73.168.57:3306,socksport=1055 &
+    # Jembatan lokal (socat + tailscale nc):
+    # Ini metode paling stabil yang tidak bergantung pada versi SOCKS.
+    echo "Starting tailscale bridge: localhost:3307 -> 100.73.168.57:3306"
+    socat TCP-LISTEN:3307,fork,reuseaddr EXEC:"tailscale nc 100.73.168.57 3306" &
     
     # Tunggu sebentar agar socat siap
     sleep 2
@@ -27,8 +27,9 @@ fi
 # Jalankan persiapan database
 echo "--- PREPARING DATABASE SCHEMA ---"
 if [ -z "$DATABASE_URL" ]; then
-    echo "❌ ERROR: DATABASE_URL is not set. Skipping migrations."
+    echo "❌ ERROR: DATABASE_URL is not set."
 else
+    # Export secara eksplisit agar prisma bisa baca
     export DATABASE_URL="$DATABASE_URL"
     npx prisma generate
     echo "Forcing schema sync with db push..."
@@ -37,6 +38,6 @@ fi
 
 # Jalankan aplikasi utama
 echo "--- STARTING NESTJS APP ---"
-# Pastikan PORT dioperasikan oleh Railway
+# Port otomatis dari Railway
 export PORT=${PORT:-2000}
 exec npm run start:prod
