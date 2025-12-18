@@ -26,12 +26,17 @@ fi
 
 # Jalankan persiapan database
 echo "--- PREPARING DATABASE SCHEMA ---"
-# Pastikan DATABASE_URL terbaca oleh prisma
-export DATABASE_URL=$DATABASE_URL
-npx prisma generate
-echo "Forcing schema sync with db push..."
-npx prisma db push --accept-data-loss
+if [ -z "$DATABASE_URL" ]; then
+    echo "❌ ERROR: DATABASE_URL is not set. Skipping migrations."
+else
+    export DATABASE_URL="$DATABASE_URL"
+    npx prisma generate
+    echo "Forcing schema sync with db push..."
+    npx prisma db push --accept-data-loss --skip-generate
+fi
 
 # Jalankan aplikasi utama
 echo "--- STARTING NESTJS APP ---"
+# Pastikan PORT dioperasikan oleh Railway
+export PORT=${PORT:-2000}
 exec npm run start:prod
