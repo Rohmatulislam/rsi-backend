@@ -25,8 +25,8 @@ FROM node:20-slim AS runner
 
 WORKDIR /app
 
-# Install tailscale and curl
-RUN apt-get update && apt-get install -y curl gnupg && \
+# Install tailscale, curl, and socat
+RUN apt-get update && apt-get install -y curl gnupg socat && \
     curl -fsSL https://tailscale.com/install.sh | sh && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
