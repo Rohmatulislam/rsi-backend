@@ -21,9 +21,15 @@ RUN DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy npx prisma genera
 RUN npm run build
 
 # Production Stage
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
 WORKDIR /app
+
+# Install tailscale and curl
+RUN apt-get update && apt-get install -y curl gnupg && \
+    curl -fsSL https://tailscale.com/install.sh | sh && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Set production environment
 ENV NODE_ENV=production
@@ -33,9 +39,13 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/start.sh ./start.sh
+
+# Setup start script
+RUN chmod +x start.sh
 
 # Expose port
 EXPOSE 2000
 
-# Start application
-CMD ["npm", "run", "start:prod"]
+# Start with tailscale
+CMD ["./start.sh"]
