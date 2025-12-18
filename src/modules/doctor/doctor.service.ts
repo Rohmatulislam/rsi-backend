@@ -170,21 +170,31 @@ export class DoctorService {
   async findAll(getDoctorsDto: GetDoctorsDto) {
     console.log('🔍 [FIND_ALL] Input DTO:', JSON.stringify(getDoctorsDto));
 
-    // Get all doctors from SIMRS Khanza
-    const kDoctors = await this.khanzaService.getDoctors();
-    const kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
+    let kDoctors = [];
+    let kSchedules = [];
+    let kDoctorCodes = [];
 
-    // Filter doctors that have schedules
-    const doctorsWithSchedules = kDoctors.filter(kDoctor =>
-      kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
-    );
+    try {
+      // Get all doctors from SIMRS Khanza
+      kDoctors = await this.khanzaService.getDoctors();
+      kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
 
-    // Get corresponding doctor records from local database
-    const kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+      // Filter doctors that have schedules
+      const doctorsWithSchedules = kDoctors.filter(kDoctor =>
+        kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
+      );
 
-    const where: any = {
-      kd_dokter: { in: kDoctorCodes }
-    };
+      // Get corresponding doctor records from local database
+      kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+    } catch (error) {
+      console.error('❌ [FIND_ALL] Error fetching from Khanza:', error.message);
+      // If Khanza is unreachable, we will show all doctors from local DB
+    }
+
+    const where: any = {};
+    if (kDoctorCodes.length > 0) {
+      where.kd_dokter = { in: kDoctorCodes };
+    }
 
     const isExecParam = getDoctorsDto.isExecutive;
     // Only filter if explicitly true
@@ -338,20 +348,27 @@ export class DoctorService {
   }
 
   private async getRecommendedDoctorsWithSchedules(limit: number, kSchedules: any[]) {
-    const kDoctors = await this.khanzaService.getDoctors();
+    let kDoctors = [];
+    let kDoctorCodes = [];
 
-    // Filter doctors that have schedules
-    const doctorsWithSchedules = kDoctors.filter(kDoctor =>
-      kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
-    );
+    try {
+      kDoctors = await this.khanzaService.getDoctors();
+      // Filter doctors that have schedules
+      const doctorsWithSchedules = kDoctors.filter(kDoctor =>
+        kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
+      );
+      kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+    } catch (error) {
+      console.error('❌ [RECOMMENDED] Error fetching from Khanza:', error.message);
+    }
 
-    // Get corresponding doctor records from local database
-    const kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+    const where: any = {};
+    if (kDoctorCodes.length > 0) {
+      where.kd_dokter = { in: kDoctorCodes };
+    }
 
     const doctors = await this.prisma.doctor.findMany({
-      where: {
-        kd_dokter: { in: kDoctorCodes }
-      },
+      where,
       take: limit,
       select: {
         id: true,
