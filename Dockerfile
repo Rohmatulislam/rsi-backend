@@ -6,6 +6,7 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
+COPY prisma.config.ts ./
 
 # Install dependencies
 RUN npm install
@@ -14,8 +15,9 @@ RUN npm install
 COPY . .
 
 # Generate Prisma Client
-# We provide a dummy DATABASE_URL because prisma generate needs it to satisfy the config
-RUN DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy npx prisma generate
+# Set DATABASE_URL as env var for prisma.config.ts
+ENV DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
+RUN npx prisma generate
 
 # Build application
 RUN npm run build
@@ -39,6 +41,7 @@ COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/start.sh ./start.sh
 
 # Setup start script
