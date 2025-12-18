@@ -30,10 +30,9 @@ if [ -z "$DATABASE_URL" ]; then
     echo "❌ ERROR: DATABASE_URL is not set."
 else
     # Export secara eksplisit agar prisma bisa baca
-    export DATABASE_URL="$DATABASE_URL"
     npx prisma generate
     echo "Forcing schema sync with db push..."
-    npx prisma db push --accept-data-loss --skip-generate
+    npx prisma db push --accept-data-loss
 fi
 
 # Jalankan aplikasi utama
