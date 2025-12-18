@@ -15,22 +15,19 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     # Tunggu koneksi stabil
     sleep 5
     
-    # Diagnostik: Cek status Tailscale
-    echo "Tailscale Status:"
-    tailscale status
-    
-    # Jembatan lokal (socat + tailscale nc):
-    # Ini metode paling stabil. Menghubungkan localhost:3307 langsung ke jaringan Tailscale
-    echo "Starting tailscale bridge: localhost:3307 -> 100.73.168.57:3306"
-    socat TCP-LISTEN:3307,fork,reuseaddr EXEC:"tailscale nc 100.73.168.57 3306" &
+    # Jembatan lokal (socat): Menghubungkan localhost:3307 ke database RS melalui Tailscale SOCKS5
+    echo "Starting socat bridge: localhost:3307 -> 100.73.168.57:3306 (via SOCKS5:1055)"
+    # Kita menggunakan format yang benar untuk socat socks5
+    socat TCP-LISTEN:3307,fork,reuseaddr SOCKS5:127.0.0.1:100.73.168.57:3306,socksport=1055 &
     
     # Tunggu sebentar agar socat siap
     sleep 2
-    echo "Bridge is ready."
 fi
 
 # Jalankan persiapan database
 echo "--- PREPARING DATABASE SCHEMA ---"
+# Pastikan DATABASE_URL terbaca oleh prisma
+export DATABASE_URL=$DATABASE_URL
 npx prisma generate
 echo "Forcing schema sync with db push..."
 npx prisma db push --accept-data-loss
