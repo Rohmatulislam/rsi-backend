@@ -11,6 +11,9 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false, // Nonaktifkan dulu untuk development
   },
+  trustedOrigins: process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : [],
   user: {
     // Menambahkan field tambahan untuk sistem rumah sakit
     additionalFields: {
