@@ -1,19 +1,19 @@
+/**
+ * File Upload Service for Article Images
+ * Handles saving and deleting images on Supabase Storage
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { SupabaseService } from '../../../infra/supabase/supabase.service';
+
+const BUCKET_NAME = 'articles';
 
 @Injectable()
 export class FileUploadService {
     private readonly logger = new Logger(FileUploadService.name);
-    private readonly uploadPath: string;
 
-    constructor(private configService: ConfigService) {
-        this.uploadPath = join(process.cwd(), 'uploads', 'articles');
-        // Buat folder uploads/articles jika belum ada
-        if (!existsSync(this.uploadPath)) {
-            mkdirSync(this.uploadPath, { recursive: true });
-        }
+    constructor(private readonly supabaseService: SupabaseService) {
+        this.logger.log(`FileUploadService (Article) initialized with Supabase Storage (bucket: ${BUCKET_NAME})`);
     }
 
     async saveArticleImage(
@@ -24,31 +24,29 @@ export class FileUploadService {
         try {
             // Hapus gambar lama jika ada
             if (oldImagePath) {
-                // Handle case where oldImagePath includes '/uploads/articles/' or just filename
-                // Database usually stores '/uploads/articles/filename.jpg'
-                // fullImagePath needs process.cwd() + oldImagePath (if starts with /)
-                const oldImagePathFull = join(process.cwd(), oldImagePath);
-                if (existsSync(oldImagePathFull)) {
-                    unlinkSync(oldImagePathFull);
-                }
+                await this.deleteArticleImage(oldImagePath);
             }
 
-            // Decode base64 dan simpan
-            // Handle data URI prefix
+            // Extract content type
+            let contentType = 'image/jpeg';
             const matches = base64Image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-            // If valid base64 with prefix
-            const imageBuffer = matches
-                ? Buffer.from(matches[2], 'base64')
-                : Buffer.from(base64Image, 'base64');
+            if (matches) {
+                contentType = matches[1];
+            }
 
-            // Tentukan full path
-            const fullImagePath = join(this.uploadPath, fileName);
+            // Decode base64
+            const base64Data = base64Image.replace(/^data:[^;]+;base64,/, '');
 
-            // Simpan file
-            writeFileSync(fullImagePath, imageBuffer);
+            // Upload to Supabase Storage
+            const publicUrl = await this.supabaseService.uploadFile(
+                BUCKET_NAME,
+                fileName,
+                base64Data,
+                contentType
+            );
 
-            // Kembalikan path relatif untuk disimpan di database
-            return `/uploads/articles/${fileName}`;
+            this.logger.log(`Article image uploaded to Supabase: ${fileName}`);
+            return publicUrl;
         } catch (error) {
             this.logger.error('Error saving article image', error);
             throw error;
@@ -58,14 +56,14 @@ export class FileUploadService {
     async deleteArticleImage(imagePath: string): Promise<void> {
         try {
             if (imagePath) {
-                const fullImagePath = join(process.cwd(), imagePath);
-                if (existsSync(fullImagePath)) {
-                    unlinkSync(fullImagePath);
+                const fileName = this.supabaseService.extractFileNameFromUrl(imagePath, BUCKET_NAME);
+                if (fileName) {
+                    await this.supabaseService.deleteFile(BUCKET_NAME, fileName);
+                    this.logger.log(`Article image deleted from Supabase: ${fileName}`);
                 }
             }
         } catch (error) {
             this.logger.error('Error deleting article image', error);
-            // Non-blocking error
         }
     }
 }

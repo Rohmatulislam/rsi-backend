@@ -1,14 +1,12 @@
 /**
  * File Upload Service for Doctor Images
- * Handles saving and deleting image files on the filesystem
+ * Handles saving and deleting image files on Supabase Storage
  * 
  * @module modules/doctor/services/file-upload.service
  */
 
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { SupabaseService } from '../../../infra/supabase/supabase.service';
 
 // =============================================================================
 // Constants
@@ -19,6 +17,9 @@ const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 
 /** Allowed image MIME types */
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+/** Storage bucket name */
+const BUCKET_NAME = 'doctors';
 
 /** Error messages */
 const ERRORS = {
@@ -36,35 +37,17 @@ const ERRORS = {
 @Injectable()
 export class FileUploadService {
   private readonly logger = new Logger(FileUploadService.name);
-  private readonly uploadPath: string;
-  private readonly baseUrl: string;
 
-  constructor(private readonly configService: ConfigService) {
-    // Initialize upload directory
-    this.uploadPath = join(process.cwd(), 'uploads');
-    this.ensureUploadDirectoryExists();
-
-    // Configure base URL for serving files
-    // Priority: PUBLIC_API_URL > API_URL > default
-    // PUBLIC_API_URL should be the network-accessible URL (e.g., http://192.168.10.159:2000)
-    const publicUrl = this.configService.get<string>('PUBLIC_API_URL');
-    const apiUrl = this.configService.get<string>('API_URL') || 'http://192.168.10.159:2000';
-
-    // Use PUBLIC_API_URL if set, otherwise use API_URL
-    const resolvedUrl = publicUrl || apiUrl;
-
-    // Remove /api suffix if present to get base URL for static files
-    this.baseUrl = resolvedUrl.replace(/\/api$/, '');
-
-    this.logger.log(`FileUploadService initialized. Base URL: ${this.baseUrl}`);
+  constructor(private readonly supabaseService: SupabaseService) {
+    this.logger.log(`FileUploadService initialized with Supabase Storage (bucket: ${BUCKET_NAME})`);
   }
 
   /**
-   * Saves a doctor profile image from base64 data
+   * Saves a doctor profile image to Supabase Storage
    * @param base64Image - Base64 encoded image data (with or without data URI prefix)
    * @param fileName - Desired filename for the saved image
    * @param oldImagePath - Optional path to previous image for cleanup
-   * @returns Absolute URL of the saved image
+   * @returns Public URL of the saved image
    * @throws BadRequestException if image data is invalid
    */
   async saveDoctorImage(
@@ -77,96 +60,69 @@ export class FileUploadService {
       throw new BadRequestException(ERRORS.NO_IMAGE_DATA);
     }
 
-    // Validate image format from data URI
+    // Extract content type from data URI
+    let contentType = 'image/jpeg';
     if (base64Image.startsWith('data:')) {
       const mimeMatch = base64Image.match(/^data:([^;]+);base64,/);
-      if (mimeMatch && !ALLOWED_IMAGE_TYPES.includes(mimeMatch[1])) {
-        throw new BadRequestException(ERRORS.INVALID_FORMAT);
+      if (mimeMatch) {
+        if (!ALLOWED_IMAGE_TYPES.includes(mimeMatch[1])) {
+          throw new BadRequestException(ERRORS.INVALID_FORMAT);
+        }
+        contentType = mimeMatch[1];
       }
     }
 
     try {
       // Clean up old image if exists
       if (oldImagePath) {
-        await this.safeDeleteImage(oldImagePath);
+        await this.deleteDoctorImage(oldImagePath);
       }
 
-      // Decode and save image
-      const imageBuffer = this.decodeBase64Image(base64Image);
+      // Decode base64 image
+      const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+      const imageBuffer = Buffer.from(base64Data, 'base64');
 
       // Validate size
       if (imageBuffer.length > MAX_IMAGE_SIZE_BYTES) {
         throw new BadRequestException(ERRORS.FILE_TOO_LARGE);
       }
 
-      const fullImagePath = join(this.uploadPath, fileName);
-      writeFileSync(fullImagePath, imageBuffer);
+      // Upload to Supabase Storage
+      const publicUrl = await this.supabaseService.uploadFile(
+        BUCKET_NAME,
+        fileName,
+        base64Data,
+        contentType
+      );
 
-      this.logger.log(`Image saved successfully: ${fileName}`);
+      this.logger.log(`Image uploaded successfully to Supabase: ${fileName}`);
+      return publicUrl;
 
-      // Return absolute URL
-      return `${this.baseUrl}/uploads/${fileName}`;
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw error;
       }
-      this.logger.error(`Failed to save image: ${fileName}`, error);
+      this.logger.error(`Failed to upload image: ${fileName}`, error);
       throw new BadRequestException(ERRORS.SAVE_FAILED);
     }
   }
 
   /**
-   * Deletes a doctor image from the filesystem
-   * @param imagePath - Path or URL of the image to delete
+   * Deletes a doctor image from Supabase Storage
+   * @param imagePath - URL of the image to delete
    */
   async deleteDoctorImage(imagePath: string): Promise<void> {
     if (!imagePath) return;
 
     try {
-      await this.safeDeleteImage(imagePath);
-      this.logger.log(`Image deleted: ${imagePath}`);
+      const fileName = this.supabaseService.extractFileNameFromUrl(imagePath, BUCKET_NAME);
+      if (fileName) {
+        await this.supabaseService.deleteFile(BUCKET_NAME, fileName);
+        this.logger.log(`Image deleted from Supabase: ${fileName}`);
+      }
     } catch (error) {
       this.logger.error(`Failed to delete image: ${imagePath}`, error);
-      throw new BadRequestException(ERRORS.DELETE_FAILED);
+      // Don't throw error on delete failure - just log it
     }
-  }
-
-  // ===========================================================================
-  // Private Helpers
-  // ===========================================================================
-
-  /**
-   * Ensures the upload directory exists
-   */
-  private ensureUploadDirectoryExists(): void {
-    if (!existsSync(this.uploadPath)) {
-      mkdirSync(this.uploadPath, { recursive: true });
-      this.logger.log(`Created upload directory: ${this.uploadPath}`);
-    }
-  }
-
-  /**
-   * Safely deletes an image file if it exists
-   * @param imagePath - Path or URL to the image
-   */
-  private async safeDeleteImage(imagePath: string): Promise<void> {
-    // Handle both absolute URLs and relative paths
-    const relativePath = imagePath.replace(this.baseUrl, '');
-    const fullPath = join(process.cwd(), relativePath);
-
-    if (existsSync(fullPath)) {
-      unlinkSync(fullPath);
-    }
-  }
-
-  /**
-   * Decodes a base64 image string to Buffer
-   * @param base64Image - Base64 string with or without data URI prefix
-   * @returns Buffer containing the image data
-   */
-  private decodeBase64Image(base64Image: string): Buffer {
-    // Remove data URI prefix if present
-    const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
-    return Buffer.from(base64Data, 'base64');
   }
 }

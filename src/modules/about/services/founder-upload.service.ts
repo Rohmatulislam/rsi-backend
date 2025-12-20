@@ -1,17 +1,19 @@
+/**
+ * File Upload Service for Founder Images
+ * Handles saving and deleting images on Supabase Storage
+ */
+
 import { Injectable, Logger } from '@nestjs/common';
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { SupabaseService } from '../../../infra/supabase/supabase.service';
+
+const BUCKET_NAME = 'founders';
 
 @Injectable()
 export class FounderUploadService {
     private readonly logger = new Logger(FounderUploadService.name);
-    private readonly uploadPath: string;
 
-    constructor() {
-        this.uploadPath = join(process.cwd(), 'uploads', 'founders');
-        if (!existsSync(this.uploadPath)) {
-            mkdirSync(this.uploadPath, { recursive: true });
-        }
+    constructor(private readonly supabaseService: SupabaseService) {
+        this.logger.log(`FounderUploadService initialized with Supabase Storage (bucket: ${BUCKET_NAME})`);
     }
 
     async saveFounderImage(
@@ -25,16 +27,26 @@ export class FounderUploadService {
                 await this.deleteFounderImage(oldImagePath);
             }
 
-            // Decode base64 dan simpan
+            // Extract content type
+            let contentType = 'image/jpeg';
             const matches = base64Image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-            const imageBuffer = matches
-                ? Buffer.from(matches[2], 'base64')
-                : Buffer.from(base64Image, 'base64');
+            if (matches) {
+                contentType = matches[1];
+            }
 
-            const fullImagePath = join(this.uploadPath, fileName);
-            writeFileSync(fullImagePath, imageBuffer);
+            // Decode base64
+            const base64Data = base64Image.replace(/^data:[^;]+;base64,/, '');
 
-            return `/uploads/founders/${fileName}`;
+            // Upload to Supabase Storage
+            const publicUrl = await this.supabaseService.uploadFile(
+                BUCKET_NAME,
+                fileName,
+                base64Data,
+                contentType
+            );
+
+            this.logger.log(`Founder image uploaded to Supabase: ${fileName}`);
+            return publicUrl;
         } catch (error) {
             this.logger.error('Error saving founder image', error);
             throw error;
@@ -43,10 +55,11 @@ export class FounderUploadService {
 
     async deleteFounderImage(imagePath: string): Promise<void> {
         try {
-            if (imagePath && imagePath.startsWith('/uploads/founders')) {
-                const fullImagePath = join(process.cwd(), imagePath);
-                if (existsSync(fullImagePath)) {
-                    unlinkSync(fullImagePath);
+            if (imagePath) {
+                const fileName = this.supabaseService.extractFileNameFromUrl(imagePath, BUCKET_NAME);
+                if (fileName) {
+                    await this.supabaseService.deleteFile(BUCKET_NAME, fileName);
+                    this.logger.log(`Founder image deleted from Supabase: ${fileName}`);
                 }
             }
         } catch (error) {

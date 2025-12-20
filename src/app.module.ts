@@ -3,6 +3,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DoctorModule } from './modules/doctor/doctor.module';
 import { DatabaseModule } from './infra/database/database.module';
+import { SupabaseModule } from './infra/supabase/supabase.module';
 import { AppointmentModule } from './modules/appointment/appointment.module';
 import { ReminderModule } from './modules/reminder/reminder.module';
 import { AdminModule } from './modules/admin/admin.module';
@@ -26,7 +27,8 @@ import { InpatientModule } from './modules/inpatient/inpatient.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    ScheduleModule.forRoot(), // Enable scheduler globally
+    ScheduleModule.forRoot(),
+    SupabaseModule,
     AuthModule.forRoot({
       auth: auth,
     }),

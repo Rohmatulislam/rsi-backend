@@ -155,4 +155,40 @@ export class ServiceService {
 
         return item;
     }
+
+    // ===========================================================================
+    // Seed Default Services
+    // ===========================================================================
+
+    async seedDefaultServices() {
+        const defaultServices = [
+            { name: 'Laboratorium', slug: 'laboratorium', title: 'Laboratorium', subtitle: 'Pemeriksaan Lab Akurat', description: 'Layanan pemeriksaan laboratorium dengan hasil akurat dan cepat.', icon: 'FlaskConical', isActive: true, isFeatured: false, order: 1 },
+            { name: 'Radiologi', slug: 'radiologi', title: 'Radiologi', subtitle: 'Diagnostik Imaging', description: 'Layanan pemeriksaan X-Ray, CT Scan, USG dan lainnya.', icon: 'Radio', isActive: true, isFeatured: false, order: 2 },
+            { name: 'MCU', slug: 'mcu', title: 'Medical Check Up', subtitle: 'Paket Kesehatan Lengkap', description: 'Paket pemeriksaan kesehatan menyeluruh untuk deteksi dini penyakit.', icon: 'ClipboardCheck', isActive: true, isFeatured: false, order: 3 },
+            { name: 'Rawat Jalan', slug: 'rawat-jalan', title: 'Rawat Jalan', subtitle: 'Poliklinik Spesialis', description: 'Konsultasi dan pemeriksaan dengan dokter spesialis.', icon: 'Stethoscope', isActive: true, isFeatured: false, order: 4 },
+            { name: 'Rawat Inap', slug: 'rawat-inap', title: 'Rawat Inap', subtitle: 'Fasilitas Lengkap', description: 'Layanan perawatan pasien dengan fasilitas kamar lengkap dan nyaman.', icon: 'Building2', isActive: true, isFeatured: false, order: 5 },
+            { name: 'Poli Eksekutif', slug: 'poli-executive', title: 'Poliklinik Eksekutif', subtitle: 'Layanan Premium', description: 'Pelayanan premium dengan fasilitas eksklusif dan waktu tunggu minimal.', icon: 'Crown', isActive: true, isFeatured: true, order: 6 },
+            { name: 'Farmasi', slug: 'farmasi', title: 'Farmasi 24 Jam', subtitle: 'Apotek Lengkap', description: 'Layanan apotek yang beroperasi sepanjang waktu.', icon: 'Pill', isActive: true, isFeatured: false, order: 7 },
+            { name: 'Rehabilitasi Medik', slug: 'rehabilitasi-medik', title: 'Rehabilitasi Medik', subtitle: 'Fisioterapi & Pemulihan', description: 'Layanan fisioterapi dan pemulihan fungsi tubuh.', icon: 'Heart', isActive: true, isFeatured: false, order: 8 },
+        ];
+
+        const results = { created: [] as string[], skipped: [] as string[] };
+
+        for (const service of defaultServices) {
+            const existing = await this.prisma.service.findUnique({
+                where: { slug: service.slug }
+            });
+
+            if (existing) {
+                results.skipped.push(service.name);
+                continue;
+            }
+
+            await this.prisma.service.create({ data: service });
+            results.created.push(service.name);
+        }
+
+        const totalCount = await this.prisma.service.count();
+        return { ...results, totalServices: totalCount };
+    }
 }

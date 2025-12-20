@@ -1,22 +1,19 @@
+/**
+ * File Upload Service for Service Images
+ * Handles saving and deleting images on Supabase Storage
+ */
+
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
+import { SupabaseService } from '../../../infra/supabase/supabase.service';
+
+const BUCKET_NAME = 'services';
 
 @Injectable()
 export class FileUploadService {
     private readonly logger = new Logger(FileUploadService.name);
-    private readonly uploadPath: string;
-    private readonly baseUrl: string;
 
-    constructor(private readonly configService: ConfigService) {
-        this.uploadPath = join(process.cwd(), 'uploads');
-        this.ensureUploadDirectoryExists();
-
-        const publicUrl = this.configService.get<string>('PUBLIC_API_URL');
-        const apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:2000';
-        const resolvedUrl = publicUrl || apiUrl;
-        this.baseUrl = resolvedUrl.replace(/\/api$/, '');
+    constructor(private readonly supabaseService: SupabaseService) {
+        this.logger.log(`FileUploadService (Service) initialized with Supabase Storage (bucket: ${BUCKET_NAME})`);
     }
 
     async saveServiceImage(
@@ -31,12 +28,28 @@ export class FileUploadService {
                 await this.deleteImage(oldImagePath);
             }
 
-            const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
-            const imageBuffer = Buffer.from(base64Data, 'base64');
-            const fullImagePath = join(this.uploadPath, fileName);
+            // Extract content type
+            let contentType = 'image/jpeg';
+            if (base64Image.startsWith('data:')) {
+                const matches = base64Image.match(/^data:([A-Za-z-+\/]+);base64,/);
+                if (matches) {
+                    contentType = matches[1];
+                }
+            }
 
-            writeFileSync(fullImagePath, imageBuffer);
-            return `${this.baseUrl}/uploads/${fileName}`;
+            // Decode base64
+            const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+
+            // Upload to Supabase Storage
+            const publicUrl = await this.supabaseService.uploadFile(
+                BUCKET_NAME,
+                fileName,
+                base64Data,
+                contentType
+            );
+
+            this.logger.log(`Service image uploaded to Supabase: ${fileName}`);
+            return publicUrl;
         } catch (error) {
             this.logger.error(`Failed to save service image: ${fileName}`, error);
             throw new BadRequestException('Gagal menyimpan gambar');
@@ -46,19 +59,13 @@ export class FileUploadService {
     async deleteImage(imagePath: string): Promise<void> {
         if (!imagePath) return;
         try {
-            const relativePath = imagePath.replace(this.baseUrl, '');
-            const fullPath = join(process.cwd(), relativePath);
-            if (existsSync(fullPath)) {
-                unlinkSync(fullPath);
+            const fileName = this.supabaseService.extractFileNameFromUrl(imagePath, BUCKET_NAME);
+            if (fileName) {
+                await this.supabaseService.deleteFile(BUCKET_NAME, fileName);
+                this.logger.log(`Service image deleted from Supabase: ${fileName}`);
             }
         } catch (error) {
             this.logger.error(`Failed to delete image: ${imagePath}`, error);
-        }
-    }
-
-    private ensureUploadDirectoryExists(): void {
-        if (!existsSync(this.uploadPath)) {
-            mkdirSync(this.uploadPath, { recursive: true });
         }
     }
 }

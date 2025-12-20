@@ -14,6 +14,12 @@ export class ServiceController {
         return this.serviceService.create(createServiceDto);
     }
 
+    @Post('seed')
+    @AllowAnonymous()
+    seed() {
+        return this.serviceService.seedDefaultServices();
+    }
+
     @Get()
     @AllowAnonymous()
     findAll() {
