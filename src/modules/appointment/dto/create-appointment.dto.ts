@@ -77,4 +77,12 @@ export class CreateAppointmentDto {
   @IsOptional()
   @IsString()
   createdByUserId?: string; // ID user yang membuat booking (untuk tracking)
+
+  @IsOptional()
+  @IsString()
+  serviceItemId?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceItemName?: string;
 }

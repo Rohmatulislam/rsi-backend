@@ -232,13 +232,17 @@ export class AppointmentService {
         appointmentDateTime.setHours(hours, minutes, 0, 0);
       }
 
+      const reason = createAppointmentDto.serviceItemName
+        ? `${createAppointmentDto.serviceItemName}${createAppointmentDto.keluhan ? ' | ' + createAppointmentDto.keluhan : ''}`
+        : (createAppointmentDto.keluhan || 'Online Booking via Website');
+
       const appointment = await this.prisma.appointment.create({
         data: {
           patientId: patient.no_rkm_medis,
           doctorId: doctor.id,
           appointmentDate: appointmentDateTime,
           status: 'scheduled',
-          reason: createAppointmentDto.keluhan || 'Online Booking via Website',
+          reason: reason,
           notes: `No Reg: ${bookingResult.no_reg}, No Rawat: ${bookingResult.no_rawat}`,
           patientName: finalPatientName,
           patientPhone: finalPatientPhone,
@@ -559,6 +563,7 @@ export class AppointmentService {
           id: appointment.id,
           appointmentDate: appointment.appointmentDate,
           status: appointment.status,
+          reason: appointment.reason,
           doctor: appointment.doctor,
           notes: appointment.notes
         });
@@ -577,6 +582,7 @@ export class AppointmentService {
             id: appointment.id,
             appointmentDate: appointment.appointmentDate,
             status: appointment.status,
+            reason: appointment.reason,
             doctor: appointment.doctor,
             notes: appointment.notes
           }]

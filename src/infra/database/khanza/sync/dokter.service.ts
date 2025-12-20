@@ -5,7 +5,7 @@ import { KhanzaDBService } from '../khanza-db.service';
 export class DokterService {
   private readonly logger = new Logger(DokterService.name);
 
-  constructor(private readonly dbService: KhanzaDBService) {}
+  constructor(private readonly dbService: KhanzaDBService) { }
 
   async getDoctors() {
     return this.dbService.db('dokter')
@@ -15,14 +15,11 @@ export class DokterService {
 
   async getDoctorSchedules() {
     return this.dbService.db('jadwal')
-      .select('*')
-      .whereNot('jam_mulai', '00:00:00')
-      .andWhereNot('jam_selesai', '00:00:00');
+      .select('*');
   }
 
   async getDoctorSchedulesWithPoliInfo() {
     // Join jadwal with poliklinik to get poli names
-    // Filter out schedules with jam_mulai and jam_selesai as 00:00:00
     return this.dbService.db('jadwal')
       .select(
         'jadwal.kd_dokter',
@@ -33,14 +30,11 @@ export class DokterService {
         'jadwal.kuota',
         'poliklinik.nm_poli'
       )
-      .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli')
-      .whereNot('jadwal.jam_mulai', '00:00:00')
-      .andWhereNot('jadwal.jam_selesai', '00:00:00');
+      .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli');
   }
 
   async getDoctorSchedulesByDoctorAndPoli(doctorCode: string) {
     // Get doctor schedules with poli information
-    // Filter out schedules with jam_mulai and jam_selesai as 00:00:00
     return this.dbService.db('jadwal')
       .select(
         'jadwal.kd_dokter',
@@ -52,9 +46,7 @@ export class DokterService {
         'poliklinik.nm_poli'
       )
       .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli')
-      .where('jadwal.kd_dokter', doctorCode)
-      .whereNot('jadwal.jam_mulai', '00:00:00')
-      .andWhereNot('jadwal.jam_selesai', '00:00:00');
+      .where('jadwal.kd_dokter', doctorCode);
   }
 
   async getSpesialis() {

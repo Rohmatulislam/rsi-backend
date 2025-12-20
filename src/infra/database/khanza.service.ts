@@ -5,6 +5,10 @@ import { BookingService } from './khanza/booking/booking.service';
 import { PatientService } from './khanza/patient/patient.service';
 import { PoliklinikService } from './khanza/sync/poliklinik.service';
 import { DokterService } from './khanza/sync/dokter.service';
+import { McuService } from './khanza/sync/mcu.service';
+import { LabService } from './khanza/sync/lab.service';
+import { RadiologiService } from './khanza/sync/radiologi.service';
+import { InpatientService } from './khanza/sync/inpatient.service';
 import { ValidationService } from './khanza/validation/validation.service';
 import { MonitoringService } from './khanza/monitoring/monitoring.service';
 import { KhanzaDBService } from './khanza/khanza-db.service';
@@ -26,9 +30,14 @@ export class KhanzaService implements OnModuleInit {
     public readonly patientService: PatientService,
     public readonly poliklinikService: PoliklinikService,
     public readonly dokterService: DokterService,
+    public readonly mcuService: McuService,
+    public readonly labService: LabService,
+    public readonly radiologiService: RadiologiService,
+    public readonly inpatientService: InpatientService,
     public readonly validationService: ValidationService,
     public readonly monitoringService: MonitoringService,
   ) { }
+
 
   async onModuleInit() {
     try {
@@ -54,6 +63,20 @@ export class KhanzaService implements OnModuleInit {
     paymentType: string; // 'umum' | 'bpjs'
   }) {
     return this.bookingService.createBooking(data);
+  }
+
+  async createMcuBooking(data: {
+    patient: any;
+    date: string; // YYYY-MM-DD
+    timeSlot: string;
+    packageId: string;
+    packageName: string;
+    poliCode: string;
+    doctorCode: string;
+    paymentType?: string;
+    notes?: string;
+  }) {
+    return this.bookingService.createMcuBooking(data);
   }
 
   async cancelBooking(noRawat: string) {
@@ -116,6 +139,8 @@ export class KhanzaService implements OnModuleInit {
     maritalStatus?: string; // BELUM MENIKAH/MENIKAH/JANDA/DUDA
     religion?: string; // ISLAM/KRISTEN/KATOLIK/HINDU/BUDDHA/KONGHUCU
     occupation?: string;
+    motherName?: string;
+    birthPlace?: string;
     bpjsNumber?: string; // No. BPJS untuk disimpan ke no_peserta
     penanggungJawab?: string; // Nama penanggung jawab
     hubunganPenanggungJawab?: string; // Hubungan dengan pasien
@@ -225,5 +250,48 @@ export class KhanzaService implements OnModuleInit {
     error?: string;
   }> {
     return this.monitoringService.getConnectionStatus();
+  }
+
+  // MCU methods
+  async getMcuPackages() {
+    return this.mcuService.getPackages();
+  }
+
+  async getMcuPackageById(id: string) {
+    return this.mcuService.getPackageById(id);
+  }
+
+  // Lab methods
+  async getLabGuarantors() {
+    return this.labService.getGuarantors();
+  }
+
+  async getLabTests(kd_pj?: string) {
+    return this.labService.getTests(kd_pj);
+  }
+
+  async getLabTestById(id: string) {
+    return this.labService.getTestById(id);
+  }
+
+  async getLabTemplateById(id: number) {
+    return this.labService.getTemplateById(id);
+  }
+
+  async getLabCategories(kd_pj?: string) {
+    return this.labService.getCategories(kd_pj);
+  }
+
+  // Inpatient methods
+  async getBedAvailability() {
+    return this.inpatientService.getBedAvailability();
+  }
+
+  async getDetailedRooms() {
+    return this.inpatientService.getDetailedRooms();
+  }
+
+  async getInpatientBuildings() {
+    return this.inpatientService.getBuildings();
   }
 }

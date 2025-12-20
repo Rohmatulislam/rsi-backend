@@ -14,6 +14,11 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ArticleModule } from './modules/article/articles.module';
 import { AboutModule } from './modules/about/about.module';
 import { UserModule } from './modules/user/user.module';
+import { ServiceModule } from './modules/service/service.module';
+import { McuModule } from './modules/mcu/mcu.module';
+import { LabModule } from './modules/lab/lab.module';
+import { RadiologiModule } from './modules/radiologi/radiologi.module';
+import { InpatientModule } from './modules/inpatient/inpatient.module';
 
 @Module({
   imports: [
@@ -34,9 +39,13 @@ import { UserModule } from './modules/user/user.module';
     ArticleModule,
     AboutModule,
     UserModule,
+    ServiceModule,
+    McuModule,
+    LabModule,
+    RadiologiModule,
+    InpatientModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
 export class AppModule { }
-

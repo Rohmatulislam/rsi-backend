@@ -24,6 +24,7 @@
     "db:studio": "prisma studio",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:seed:doctors": "npx tsx prisma/seed-doctors.ts",
+    "db:seed:services": "npx tsx prisma/seed-services.ts",
     "db:update:doctors": "npx tsx prisma/update-doctor-images-and-fee.ts",
     "db:sync-kd-dokter": "npx tsx prisma/sync-doctor-kd-dokter.ts",
     "db:reset": "prisma migrate reset"

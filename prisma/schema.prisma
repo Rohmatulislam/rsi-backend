@@ -226,11 +226,11 @@ model Service {
   id          String   @id @default(cuid())
   name        String   // Nama layanan (e.g., "Rawat Inap", "MCU")
   slug        String   @unique
+  title       String?  // Title on the page hero
+  subtitle    String?  // Subtitle on the page hero
   description String?  @db.Text
   icon        String?  // Icon name
   image       String?  // Image URL
-  price       Int?     // Harga layanan (jika ada)
-  duration    Int?     // Durasi layanan dalam menit
   isActive    Boolean  @default(true)
   isFeatured  Boolean  @default(false) // Layanan unggulan
   order       Int      @default(0)
@@ -238,7 +238,42 @@ model Service {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  categories  Category[] @relation("ServiceCategory")
+  categories  Category[]    @relation("ServiceCategory")
+  items       ServiceItem[]
+  faqs        ServiceFaq[]
+}
+
+model ServiceItem {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  category    String?  // Untuk grouping, misal "Gedung Mina", "Kategori Lab"
+  name        String   // Nama item/paket (e.g. "Paket Basic", "Kelas 1")
+  description String?  @db.Text
+  price       Int?     // Harga (bisa null jika via WhatsApp/Kontrak)
+  features    String?  @db.Text // JSON string atau list dipisahkan koma
+  icon        String?  // Icon name for specific items
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([serviceId])
+}
+
+model ServiceFaq {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  question    String
+  answer      String   @db.Text
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([serviceId])
 }
 
 model Article {

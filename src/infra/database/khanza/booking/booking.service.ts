@@ -105,6 +105,98 @@ export class BookingService {
     }
   }
 
+  async createMcuBooking(data: {
+    patient: any;
+    date: string; // YYYY-MM-DD
+    timeSlot: string;
+    packageId: string;
+    packageName: string;
+    poliCode: string;
+    doctorCode: string;
+    paymentType?: string;
+    notes?: string;
+  }) {
+    const { patient, date, timeSlot, packageId, packageName, poliCode, doctorCode, paymentType, notes } = data;
+
+    // 1. Generate No Reg for booking_registrasi (sequential per doctor/date)
+    const noReg = await this.getNextNoRegBooking(doctorCode, date);
+
+    // 2. Prepare data for booking_registrasi
+    // Map timeSlot to actual time if it's a string like 'pagi', 'siang', 'sore'
+    let timeValue = '08:00:00';
+    if (timeSlot === 'pagi') timeValue = '08:00:00';
+    else if (timeSlot === 'siang') timeValue = '13:00:00';
+    else if (timeSlot === 'sore') timeValue = '16:00:00';
+    else if (timeSlot && timeSlot.includes(':')) timeValue = timeSlot.includes(':') && timeSlot.split(':').length === 2 ? `${timeSlot}:00` : timeSlot;
+
+    const bookingRegData = {
+      tanggal_booking: new Date().toISOString().split('T')[0],
+      jam_booking: new Date().toLocaleTimeString('id-ID', { hour12: false }).replace(/\./g, ':'),
+      no_rkm_medis: patient.no_rkm_medis,
+      tanggal_periksa: date,
+      kd_dokter: doctorCode,
+      kd_poli: poliCode,
+      no_reg: noReg,
+      kd_pj: paymentType || 'A09', // Default UMUM
+      limit_reg: 0,
+      waktu_kunjungan: `${date} ${timeValue}`,
+      status: 'Belum'
+    };
+
+    // 3. Prepare data for booking_periksa (MCU specific details)
+    // In Khanza, booking_periksa often uses a unique booking number. 
+    // We'll use a combination of date and MR number or just the no_reg if suitable.
+    // However, the schema showed no_booking as varchar(17) PK.
+    const noBooking = `BK${date.replace(/-/g, '')}${patient.no_rkm_medis.slice(-4)}${noReg}`;
+
+    const bookingPeriksaData = {
+      no_booking: noBooking.slice(0, 17),
+      tanggal: date,
+      nama: patient.nm_pasien,
+      alamat: patient.alamat || '-',
+      no_telp: patient.no_tlp || '-',
+      email: patient.email || '-',
+      kd_poli: poliCode,
+      tambahan_pesan: `Paket: ${packageName} (${packageId})${notes ? ' | ' + notes : ''}`,
+      status: 'Belum Dibalas',
+      tanggal_booking: new Date()
+    };
+
+    try {
+      await this.dbService.db.transaction(async (trx) => {
+        await trx('booking_registrasi').insert(bookingRegData);
+        await trx('booking_periksa').insert(bookingPeriksaData);
+      });
+
+      this.logger.log(`MCU Booking Created: ${noBooking} for RM ${patient.no_rkm_medis}`);
+
+      return {
+        success: true,
+        no_reg: noReg,
+        no_booking: noBooking,
+        no_rawat: noBooking // For consistency with other flows
+      };
+    } catch (e) {
+      this.logger.error('Error creating MCU booking in Khanza', e);
+      throw e;
+    }
+  }
+
+  async getNextNoRegBooking(doctorCode: string, date: string): Promise<string> {
+    const lastReg = await this.dbService.db('booking_registrasi')
+      .where('kd_dokter', doctorCode)
+      .where('tanggal_periksa', date)
+      .orderBy('no_reg', 'desc')
+      .first();
+
+    let nextNumber = 1;
+    if (lastReg && lastReg.no_reg) {
+      nextNumber = parseInt(lastReg.no_reg) + 1;
+    }
+
+    return nextNumber.toString().padStart(3, '0');
+  }
+
   async cancelBooking(noRawat: string) {
     try {
       this.logger.log(`Attempting to cancel booking in Khanza: ${noRawat}`);

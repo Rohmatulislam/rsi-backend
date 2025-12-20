@@ -48,6 +48,8 @@ export class PatientService {
     maritalStatus?: string; // BELUM MENIKAH/MENIKAH/JANDA/DUDA
     religion?: string; // ISLAM/KRISTEN/KATOLIK/HINDU/BUDDHA/KONGHUCU
     occupation?: string;
+    motherName?: string;
+    birthPlace?: string;
     bpjsNumber?: string; // No. BPJS untuk disimpan ke no_peserta
     penanggungJawab?: string; // Nama penanggung jawab
     hubunganPenanggungJawab?: string; // Hubungan dengan pasien
@@ -180,9 +182,9 @@ export class PatientService {
         nm_pasien: data.name,
         no_ktp: data.nik,
         jk: data.gender,
-        tmp_lahir: '-', // Place of birth - could be added to params
+        tmp_lahir: data.birthPlace || '-', // Place of birth
         tgl_lahir: data.birthDate,
-        nm_ibu: '-', // Mother's name - could be added to params
+        nm_ibu: data.motherName || '-', // Mother's name
         alamat: data.address,
         gol_darah: data.bloodType || '-',
         pekerjaan: data.occupation || '-',
