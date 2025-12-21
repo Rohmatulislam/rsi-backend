@@ -11,6 +11,8 @@ import { RadiologiService } from './khanza/sync/radiologi.service';
 import { InpatientService } from './khanza/sync/inpatient.service';
 import { ValidationService } from './khanza/validation/validation.service';
 import { MonitoringService } from './khanza/monitoring/monitoring.service';
+import { KhanzaFarmasiService } from './khanza/farmasi/farmasi.service';
+import { KhanzaRehabilitationService } from './khanza/rehabilitation/rehabilitation.service';
 import { KhanzaDBService } from './khanza/khanza-db.service';
 
 @Injectable()
@@ -36,6 +38,8 @@ export class KhanzaService implements OnModuleInit {
     public readonly inpatientService: InpatientService,
     public readonly validationService: ValidationService,
     public readonly monitoringService: MonitoringService,
+    public readonly farmasiService: KhanzaFarmasiService,
+    public readonly rehabilitationService: KhanzaRehabilitationService,
   ) { }
 
 
@@ -293,5 +297,15 @@ export class KhanzaService implements OnModuleInit {
 
   async getInpatientBuildings() {
     return this.inpatientService.getBuildings();
+  }
+
+  // Farmasi methods
+  async getPrescriptionStatus(identifier: string) {
+    return this.farmasiService.getPrescriptionStatus(identifier);
+  }
+
+  // Rehab methods
+  async getRehabProgress(identifier: string) {
+    return this.rehabilitationService.getRehabProgress(identifier);
   }
 }

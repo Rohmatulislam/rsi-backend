@@ -134,6 +134,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
   appointments  Appointment[] @relation("UserAppointments") // Booking yang dibuat oleh user ini
+  prescriptions Prescription[] @relation("UserPrescriptions")
   profile       UserProfile?
   familyMembers FamilyMember[]
 
@@ -364,3 +365,23 @@ model CoreValue {
 }
 
 
+
+model Prescription {
+  id              String   @id @default(cuid())
+  userId          String?  // Optional if guest upload is allowed
+  patientName     String
+  patientPhone    String
+  patientRM       String?
+  prescriptionImageUrl String? // Original prescription photo
+  deliveryMethod  String   @default("PICKUP") // PICKUP | DELIVERY
+  address         String?  // If delivery
+  status          String   @default("SUBMITTED") // SUBMITTED | VERIFIED | PROCESSING | READY | COMPLETED | CANCELLED
+  note            String?
+  totalPrice      Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User?    @relation("UserPrescriptions", fields: [userId], references: [id])
+
+  @@map("prescriptions")
+}

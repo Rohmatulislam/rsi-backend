@@ -20,6 +20,8 @@ import { McuModule } from './modules/mcu/mcu.module';
 import { LabModule } from './modules/lab/lab.module';
 import { RadiologiModule } from './modules/radiologi/radiologi.module';
 import { InpatientModule } from './modules/inpatient/inpatient.module';
+import { FarmasiModule } from './modules/farmasi/farmasi.module';
+import { RehabilitationModule } from './modules/rehabilitation/rehabilitation.module';
 
 @Module({
   imports: [
@@ -46,6 +48,8 @@ import { InpatientModule } from './modules/inpatient/inpatient.module';
     LabModule,
     RadiologiModule,
     InpatientModule,
+    FarmasiModule,
+    RehabilitationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
