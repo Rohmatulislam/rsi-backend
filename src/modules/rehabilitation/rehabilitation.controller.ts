@@ -9,4 +9,14 @@ export class RehabilitationController {
     async getRehabProgress(@Param('identifier') identifier: string) {
         return this.rehabilitationService.getRehabProgress(identifier);
     }
+
+    @Get('therapies')
+    async getTherapies() {
+        return this.rehabilitationService.getTherapies();
+    }
+
+    @Get('doctors')
+    async getDoctors() {
+        return this.rehabilitationService.getDoctors();
+    }
 }

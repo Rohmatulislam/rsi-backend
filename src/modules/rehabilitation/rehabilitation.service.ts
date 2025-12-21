@@ -18,4 +18,14 @@ export class RehabilitationService {
 
         return progress;
     }
+
+    async getTherapies() {
+        this.logger.log('Fetching all rehab therapies');
+        return this.khanzaService.rehabilitationService.getRehabTherapies();
+    }
+
+    async getDoctors() {
+        this.logger.log('Fetching KFR specialists');
+        return this.khanzaService.rehabilitationService.getRehabDoctors();
+    }
 }

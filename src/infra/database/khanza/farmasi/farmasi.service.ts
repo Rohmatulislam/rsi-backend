@@ -82,4 +82,32 @@ export class KhanzaFarmasiService {
             throw error;
         }
     }
+
+    /**
+     * Mencari data barang/obat dan stoknya
+     */
+    async searchMedicines(query: string) {
+        try {
+            const db = this.dbService.db;
+            return await db('databarang as d')
+                .select(
+                    'd.kode_brng as id',
+                    'd.nama_brng as name',
+                    'd.ralan as price',
+                    'd.kode_sat as unit',
+                    'k.nama as category',
+                    db.raw('SUM(g.stok) as total_stock')
+                )
+                .leftJoin('kodesatuan as s', 'd.kode_sat', 's.kode_sat')
+                .leftJoin('kategory_barang as k', 'd.kode_kategori', 'k.kode_kategori')
+                .leftJoin('gudangbarang as g', 'd.kode_brng', 'g.kode_brng')
+                .where('d.status', '1')
+                .andWhere('d.nama_brng', 'like', `%${query}%`)
+                .groupBy('d.kode_brng')
+                .limit(50);
+        } catch (error) {
+            this.logger.error('Error searching medicines in Khanza', error);
+            return [];
+        }
+    }
 }

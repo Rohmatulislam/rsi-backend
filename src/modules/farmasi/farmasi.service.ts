@@ -109,4 +109,9 @@ export class FarmasiService {
 
         return results.map(item => new Prescription(item));
     }
+
+    async searchMedicines(query: string) {
+        this.logger.log(`Searching medicines for: ${query}`);
+        return this.khanzaService.farmasiService.searchMedicines(query);
+    }
 }
