@@ -22,6 +22,8 @@ import { RadiologiModule } from './modules/radiologi/radiologi.module';
 import { InpatientModule } from './modules/inpatient/inpatient.module';
 import { FarmasiModule } from './modules/farmasi/farmasi.module';
 import { RehabilitationModule } from './modules/rehabilitation/rehabilitation.module';
+import { BannerModule } from './modules/banner/banner.module';
+import { UploadModule } from './modules/upload/upload.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { RehabilitationModule } from './modules/rehabilitation/rehabilitation.mo
     InpatientModule,
     FarmasiModule,
     RehabilitationModule,
+    BannerModule,
+    UploadModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -385,3 +385,19 @@ model Prescription {
 
   @@map("prescriptions")
 }
+
+model Banner {
+  id          String   @id @default(cuid())
+  title       String
+  subtitle    String?
+  description String?
+  imageUrl    String
+  link        String?
+  linkText    String?  @default("Selengkapnya")
+  order       Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("banners")
+}
