@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,71 +7,53 @@ datasource db {
 }
 
 model Doctor {
-  id                String   @id @default(cuid())
-  name              String
-  email             String   @unique
-  phone             String?
-  specialization    String?
-  department        String?
-  licenseNumber     String   @unique
-  imageUrl          String?
-  bio               String?
-  experience_years  Int?
-  education         String?
-  certifications    String?
-  consultation_fee  Int?
+  id                 String        @id @default(cuid())
+  name               String
+  email              String        @unique
+  phone              String?
+  specialization     String?
+  department         String?
+  licenseNumber      String        @unique
+  imageUrl           String?
+  bio                String?
+  experience_years   Int?
+  education          String?
+  certifications     String?
+  consultation_fee   Int?
   specialtyImage_url String?
-  is_executive      Boolean?
-  sip_number        String?
-  bpjs              Boolean?
-  slug              String?  @unique
-  kd_dokter         String?  @unique  // Added unique constraint to allow use in where unique input
-  description       String?
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  // Relations
-  appointments Appointment[]
-  schedules    Schedule[]
-  categories   Category[]    @relation("DoctorCategory")
+  is_executive       Boolean?
+  sip_number         String?
+  bpjs               Boolean?
+  slug               String?       @unique
+  kd_dokter          String?       @unique
+  description        String?
+  isActive           Boolean       @default(true)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  appointments       Appointment[]
+  schedules          Schedule[]
+  categories         Category[]    @relation("DoctorCategory")
 }
-
 
 model Category {
-  id          String   @id @default(cuid())
-  name        String   // Nama kategori (e.g., "Poli Umum", "Bedah", "Anak")
-  slug        String   @unique // URL-friendly name
-  type        CategoryType // Jenis kategori
-  description String?  // Deskripsi kategori
-  icon        String?  // Icon name atau URL
-  color       String?  // Warna untuk UI (hex code)
-  order       Int      @default(0) // Urutan tampilan
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  doctors     Doctor[] @relation("DoctorCategory")
-  services    Service[] @relation("ServiceCategory")
-  articles    Article[] @relation("ArticleCategory")
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  type        CategoryType
+  description String?
+  icon        String?
+  color       String?
+  order       Int          @default(0)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  articles    Article[]    @relation("ArticleCategory")
+  doctors     Doctor[]     @relation("DoctorCategory")
+  services    Service[]    @relation("ServiceCategory")
 }
-
-enum CategoryType {
-  POLI              // Poliklinik (Poli Umum, Poli Anak, dll)
-  SPECIALIST        // Spesialisasi Dokter (Bedah, Jantung, dll)
-  SERVICE           // Layanan (Rawat Inap, Rawat Jalan, dll)
-  FACILITY          // Fasilitas (Laboratorium, Radiologi, dll)
-  EMERGENCY         // Layanan Darurat (IGD, Ambulance)
-  SUPPORT           // Layanan Pendukung (Farmasi, Gizi, dll)
-  FEATURED          // Layanan Unggulan
-  DEPARTMENT        // Departemen/Unit
-  ARTICLE_CATEGORY  // Kategori Artikel/Berita
-}
-
 
 model Appointment {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   patientId       String
   patientName     String?
   patientPhone    String?
@@ -85,75 +61,61 @@ model Appointment {
   patientAddress  String?
   doctorId        String
   appointmentDate DateTime
-  status          String   @default("scheduled") // scheduled, confirmed, completed, cancelled
+  status          String         @default("scheduled")
   reason          String?
   notes           String?
-  createdByUserId String?  // User yang membuat booking (opsional untuk backward compatibility)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  doctor        Doctor        @relation(fields: [doctorId], references: [id])
-  createdByUser User?         @relation("UserAppointments", fields: [createdByUserId], references: [id])
-  notifications Notification[]
+  createdByUserId String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  createdByUser   User?          @relation("UserAppointments", fields: [createdByUserId], references: [id])
+  doctor          Doctor         @relation(fields: [doctorId], references: [id])
+  notifications   Notification[]
 }
 
 model Schedule {
   id          String   @id @default(cuid())
   doctorId    String
-  dayOfWeek   Int // 0 = Sunday, 1 = Monday, etc.
-  startTime   String // Format: "HH:mm"
-  endTime     String // Format: "HH:mm"
+  dayOfWeek   Int
+  startTime   String
+  endTime     String
   maxPatients Int?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  doctor Doctor @relation(fields: [doctorId], references: [id])
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
 }
 
-// User roles for RBAC (reference only, stored as String for Better-Auth compatibility)
-// Valid values: ADMIN, DOCTOR, NURSE, STAFF, PATIENT
-// enum UserRole {
-//   ADMIN     // Administrator - full access
-//   DOCTOR    // Dokter - akses appointment, schedule
-//   NURSE     // Perawat - akses appointment
-//   STAFF     // Staff administratif
-//   PATIENT   // Pasien - akses booking, riwayat
-// }
-
-
 model User {
-  id            String        @id
+  id            String         @id
   name          String
-  email         String
-  emailVerified Boolean       @default(false)
+  email         String         @unique
+  emailVerified Boolean        @default(false)
   image         String?
-  role          String        @default("PATIENT") // ADMIN, DOCTOR, NURSE, STAFF, PATIENT
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  sessions      Session[]
+  role          String         @default("PATIENT")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  appointments  Appointment[]  @relation("UserAppointments")
   accounts      Account[]
-  appointments  Appointment[] @relation("UserAppointments") // Booking yang dibuat oleh user ini
-  prescriptions Prescription[] @relation("UserPrescriptions")
-  profile       UserProfile?
   familyMembers FamilyMember[]
+  prescriptions Prescription[] @relation("UserPrescriptions")
+  sessions      Session[]
+  profile       UserProfile?
 
-  @@unique([email])
   @@map("user")
 }
 
 model UserProfile {
-  id        String   @id @default(cuid())
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String    @id @default(cuid())
+  userId    String    @unique
   phone     String?
   address   String?
   birthDate DateTime?
-  gender    String?  // "L" | "P"
+  gender    String?
   nik       String?
   bloodType String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_profile")
 }
@@ -161,15 +123,15 @@ model UserProfile {
 model FamilyMember {
   id           String    @id @default(cuid())
   userId       String
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name         String
-  relationship String    // "spouse", "child", "parent", "sibling", "other"
+  relationship String
   nik          String?
   birthDate    DateTime?
-  gender       String?   // "L" | "P"
+  gender       String?
   phone        String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("family_member")
@@ -178,7 +140,7 @@ model FamilyMember {
 model Session {
   id        String   @id
   expiresAt DateTime
-  token     String
+  token     String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   ipAddress String?
@@ -186,7 +148,6 @@ model Session {
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([token])
   @@index([userId])
   @@map("session")
 }
@@ -196,7 +157,6 @@ model Account {
   accountId             String
   providerId            String
   userId                String
-  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   accessToken           String?
   refreshToken          String?
   idToken               String?
@@ -206,6 +166,7 @@ model Account {
   password              String?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("account")
@@ -224,109 +185,98 @@ model Verification {
 }
 
 model Service {
-  id          String   @id @default(cuid())
-  name        String   // Nama layanan (e.g., "Rawat Inap", "MCU")
-  slug        String   @unique
-  title       String?  // Title on the page hero
-  subtitle    String?  // Subtitle on the page hero
-  description String?  @db.Text
-  icon        String?  // Icon name
-  image       String?  // Image URL
-  isActive    Boolean  @default(true)
-  isFeatured  Boolean  @default(false) // Layanan unggulan
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  categories  Category[]    @relation("ServiceCategory")
-  items       ServiceItem[]
+  id          String        @id @default(cuid())
+  name        String
+  slug        String        @unique
+  description String?
+  icon        String?
+  image       String?
+  isActive    Boolean       @default(true)
+  isFeatured  Boolean       @default(false)
+  order       Int           @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  subtitle    String?
+  title       String?
   faqs        ServiceFaq[]
+  items       ServiceItem[]
+  categories  Category[]    @relation("ServiceCategory")
 }
 
 model ServiceItem {
   id          String   @id @default(cuid())
   serviceId   String
-  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  category    String?  // Untuk grouping, misal "Gedung Mina", "Kategori Lab"
-  name        String   // Nama item/paket (e.g. "Paket Basic", "Kelas 1")
-  description String?  @db.Text
-  price       Int?     // Harga (bisa null jika via WhatsApp/Kontrak)
-  features    String?  @db.Text // JSON string atau list dipisahkan koma
-  icon        String?  // Icon name for specific items
+  category    String?
+  name        String
+  description String?
+  price       Int?
+  features    String?
+  icon        String?
   imageUrl    String?
   isActive    Boolean  @default(true)
   order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@index([serviceId])
 }
 
 model ServiceFaq {
-  id          String   @id @default(cuid())
-  serviceId   String
-  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  question    String
-  answer      String   @db.Text
-  order       Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  serviceId String
+  question  String
+  answer    String
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@index([serviceId])
 }
 
 model Article {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   title       String
-  slug        String   @unique
-  content     String   @db.Text
-  excerpt     String?  @db.Text
-  image       String?  // Featured image
+  slug        String        @unique
+  content     String
+  excerpt     String?
+  image       String?
   author      String?
-  authorId    String?  // Reference to User if needed
+  authorId    String?
   status      ArticleStatus @default(DRAFT)
   publishedAt DateTime?
-  viewCount   Int      @default(0)
-  isActive    Boolean  @default(true)
-  isFeatured  Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // Relations
-  categories  Category[] @relation("ArticleCategory")
-}
-
-enum ArticleStatus {
-  DRAFT
-  PUBLISHED
-  ARCHIVED
+  viewCount   Int           @default(0)
+  isActive    Boolean       @default(true)
+  isFeatured  Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  categories  Category[]    @relation("ArticleCategory")
 }
 
 model Notification {
-  id              String        @id @default(cuid())
-  type            String        // booking_confirmation, booking_cancellation, reminder, etc.
-  recipient       String        // Patient name
-  recipientContact String       // Email or phone
-  message         String        // Notification message
-  status          String        // sent, failed, pending
-  appointmentId   String?       // Reference to appointment
-  sentAt          DateTime      @default(now())
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
+  id               String       @id @default(cuid())
+  type             String
+  recipient        String
+  recipientContact String
+  message          String
+  status           String
+  appointmentId    String?
+  sentAt           DateTime     @default(now())
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  appointment      Appointment? @relation(fields: [appointmentId], references: [id])
 }
 
 model Founder {
   id          String   @id @default(cuid())
-  name        String   // Nama lengkap pendiri
-  role        String   // Jabatan/peran pendiri
-  description String?  @db.Text // Deskripsi kontribusi (opsional)
-  image       String?  // Path gambar hasil upload
-  badge       String?  // Label badge (e.g., PENDIRI)
-  order       Int      @default(0) // Urutan tampilan
+  name        String
+  role        String
+  description String?
+  image       String?
+  badge       String?
+  order       Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -334,12 +284,12 @@ model Founder {
 
 model Milestone {
   id          String   @id @default(cuid())
-  year        String   // Tahun kejadian
-  title       String   // Judul milestone
-  description String   @db.Text // Deskripsi detail
-  icon        String?  // Nama icon Lucide
-  highlight   Boolean  @default(false) // Milestone penting
-  order       Int      @default(0) // Urutan tampilan
+  year        String
+  title       String
+  description String
+  icon        String?
+  highlight   Boolean  @default(false)
+  order       Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -347,41 +297,38 @@ model Milestone {
 
 model AboutContent {
   id        String   @id @default(cuid())
-  key       String   @unique // "history", "vision", "mission"
-  value     String   @db.Text // Konten teks atau JSON array untuk misi
+  key       String   @unique
+  value     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model CoreValue {
   id          String   @id @default(cuid())
-  title       String   // Judul nilai (Ikhlas, Profesional, dll)
-  description String   // Deskripsi nilai
-  icon        String   // Nama icon Lucide (Heart, CheckCircle2, dll)
-  order       Int      @default(0) // Urutan tampilan
+  title       String
+  description String
+  icon        String
+  order       Int      @default(0)
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
 
-
-
 model Prescription {
-  id              String   @id @default(cuid())
-  userId          String?  // Optional if guest upload is allowed
-  patientName     String
-  patientPhone    String
-  patientRM       String?
-  prescriptionImageUrl String? // Original prescription photo
-  deliveryMethod  String   @default("PICKUP") // PICKUP | DELIVERY
-  address         String?  // If delivery
-  status          String   @default("SUBMITTED") // SUBMITTED | VERIFIED | PROCESSING | READY | COMPLETED | CANCELLED
-  note            String?
-  totalPrice      Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  user            User?    @relation("UserPrescriptions", fields: [userId], references: [id])
+  id                   String   @id @default(cuid())
+  patientName          String
+  patientPhone         String
+  patientRM            String?
+  prescriptionImageUrl String?
+  deliveryMethod       String   @default("PICKUP")
+  address              String?
+  status               String   @default("SUBMITTED")
+  note                 String?
+  totalPrice           Int?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  userId               String?
+  user                 User?    @relation("UserPrescriptions", fields: [userId], references: [id])
 
   @@map("prescriptions")
 }
@@ -400,4 +347,22 @@ model Banner {
   updatedAt   DateTime @updatedAt
 
   @@map("banners")
+}
+
+enum CategoryType {
+  POLI
+  SPECIALIST
+  SERVICE
+  FACILITY
+  EMERGENCY
+  SUPPORT
+  FEATURED
+  DEPARTMENT
+  ARTICLE_CATEGORY
+}
+
+enum ArticleStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
 }
