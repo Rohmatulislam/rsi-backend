@@ -53,4 +53,14 @@ export class AppointmentController {
   getByUserId(@Param('userId') userId: string) {
     return this.appointmentService.getByUserId(userId);
   }
+
+  @Get('queue-status/:doctorCode/:poliCode/:date')
+  @AllowAnonymous()
+  getQueueStatus(
+    @Param('doctorCode') doctorCode: string,
+    @Param('poliCode') poliCode: string,
+    @Param('date') date: string
+  ) {
+    return this.appointmentService.getQueueStatus(doctorCode, poliCode, date);
+  }
 }

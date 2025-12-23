@@ -725,4 +725,71 @@ export class AppointmentService {
     };
   }
 
+  /**
+   * Get real-time queue status from SIMRS Khanza
+   */
+  async getQueueStatus(doctorCode: string, poliCode: string, date: string) {
+    this.logger.log(`Fetching queue status for Doc: ${doctorCode}, Poli: ${poliCode}, Date: ${date}`);
+
+    try {
+      // 1. Get total patients (excluding cancelled)
+      const totalResult = await this.khanzaService.db('reg_periksa')
+        .where('kd_dokter', doctorCode)
+        .where('kd_poli', poliCode)
+        .where('tgl_registrasi', date)
+        .whereNot('stts', 'Batal')
+        .count('* as count')
+        .first();
+
+      const totalQueue = parseInt(String(totalResult?.count || '0'));
+
+      // 2. Get current calling number
+      // We look for the maximum no_reg where status is NOT 'Belum' and NOT 'Batal'
+      // This represents the last person who was called to the room or finished
+      const currentResult = await this.khanzaService.db('reg_periksa')
+        .where('kd_dokter', doctorCode)
+        .where('kd_poli', poliCode)
+        .where('tgl_registrasi', date)
+        .whereNotIn('stts', ['Belum', 'Batal'])
+        .max('no_reg as current')
+        .first();
+
+      const currentNumber = currentResult?.current ? parseInt(currentResult.current) : 0;
+
+      // 3. Get total waiting (status is 'Belum')
+      const waitingResult = await this.khanzaService.db('reg_periksa')
+        .where('kd_dokter', doctorCode)
+        .where('kd_poli', poliCode)
+        .where('tgl_registrasi', date)
+        .where('stts', 'Belum')
+        .count('* as count')
+        .first();
+
+      const totalWaiting = parseInt(String(waitingResult?.count || '0'));
+
+      return {
+        doctorCode,
+        poliCode,
+        date,
+        currentNumber,
+        totalQueue,
+        totalWaiting,
+        status: currentNumber >= totalQueue && totalQueue > 0 ? 'Selesai' : 'Aktif',
+        lastUpdated: new Date().toISOString()
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get queue status: ${error.message}`);
+      return {
+        doctorCode,
+        poliCode,
+        date,
+        currentNumber: 0,
+        totalQueue: 0,
+        totalWaiting: 0,
+        status: 'Error',
+        message: 'Gagal mengambil data antrean'
+      };
+    }
+  }
+
 }
