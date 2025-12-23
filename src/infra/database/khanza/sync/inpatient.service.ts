@@ -30,8 +30,8 @@ export class InpatientService {
                 .orderBy('bangsal.nm_bangsal', 'asc');
 
             return beds.map(bed => ({
-                buildingId: bed.kd_bangsal,
-                buildingName: bed.nm_bangsal,
+                unitId: bed.kd_bangsal,
+                unitName: bed.nm_bangsal,
                 class: bed.kelas,
                 total: parseInt(bed.total as string),
                 available: parseInt(bed.available as string),
@@ -52,8 +52,8 @@ export class InpatientService {
                 .join('bangsal', 'kamar.kd_bangsal', 'bangsal.kd_bangsal')
                 .select(
                     'kamar.kd_kamar as id',
-                    'kamar.kd_bangsal as buildingId',
-                    'bangsal.nm_bangsal as buildingName',
+                    'kamar.kd_bangsal as unitId',
+                    'bangsal.nm_bangsal as unitName',
                     'kamar.kelas as class',
                     'kamar.status',
                     'kamar.trf_kamar as price'
@@ -64,8 +64,8 @@ export class InpatientService {
 
             return rooms.map(room => ({
                 id: room.id,
-                buildingId: room.buildingId,
-                buildingName: room.buildingName,
+                unitId: room.unitId,
+                unitName: room.unitName,
                 class: room.class,
                 status: room.status, // 'ISI', 'KOSONG', 'DIBERSIHKAN'
                 price: parseFloat(room.price as string),
@@ -77,16 +77,16 @@ export class InpatientService {
     }
 
     /**
-     * Mengambil daftar bangsal (paviliun/gedung)
+     * Mengambil daftar unit (paviliun/unit)
      */
-    async getBuildings() {
+    async getUnits() {
         try {
             return await this.dbService.db('bangsal')
                 .select('kd_bangsal as id', 'nm_bangsal as name')
                 .where('status', '1')
                 .orderBy('nm_bangsal', 'asc');
         } catch (error) {
-            this.logger.error('Error fetching buildings from Khanza', error);
+            this.logger.error('Error fetching units from Khanza', error);
             return [];
         }
     }

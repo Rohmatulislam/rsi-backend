@@ -295,8 +295,8 @@ export class KhanzaService implements OnModuleInit {
     return this.inpatientService.getDetailedRooms();
   }
 
-  async getInpatientBuildings() {
-    return this.inpatientService.getBuildings();
+  async getInpatientUnits() {
+    return this.inpatientService.getUnits();
   }
 
   // Farmasi methods
