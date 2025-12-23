@@ -25,6 +25,7 @@ import { RehabilitationModule } from './modules/rehabilitation/rehabilitation.mo
 import { BannerModule } from './modules/banner/banner.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { ChatModule } from './modules/chat/chat.module';
+import { CategoryModule } from './modules/category/category.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ChatModule } from './modules/chat/chat.module';
     BannerModule,
     UploadModule,
     ChatModule,
+    CategoryModule,
   ],
   controllers: [AppController],
   providers: [AppService],

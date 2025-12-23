@@ -13,6 +13,7 @@ export class ArticleService {
 
     async create(createArticleDto: CreateArticleDto) {
         let imagePath = createArticleDto.image;
+        const { categoryIds, ...articleData } = createArticleDto;
 
         if (imagePath && imagePath.startsWith('data:image')) {
             const ext = imagePath.split(';')[0].split('/')[1] || 'jpg';
@@ -22,9 +23,13 @@ export class ArticleService {
 
         return this.prisma.article.create({
             data: {
-                ...createArticleDto,
-                image: imagePath
+                ...articleData,
+                image: imagePath,
+                categories: categoryIds ? {
+                    connect: categoryIds.map(id => ({ id }))
+                } : undefined
             },
+            include: { categories: true }
         });
     }
 
@@ -32,26 +37,31 @@ export class ArticleService {
         return this.prisma.article.findMany({
             where: { isActive: true },
             orderBy: { createdAt: 'desc' },
+            include: { categories: true }
         });
     }
 
     async findOne(slug: string) {
         const article = await this.prisma.article.findUnique({
             where: { slug },
+            include: { categories: true }
         });
         if (!article) throw new NotFoundException(`Article with slug ${slug} not found`);
         return article;
     }
 
     async update(slug: string, updateArticleDto: UpdateArticleDto) {
-        const existing = await this.prisma.article.findUnique({ where: { slug } });
+        const existing = await this.prisma.article.findUnique({
+            where: { slug },
+            include: { categories: true }
+        });
         if (!existing) throw new NotFoundException(`Article with slug ${slug} not found`);
 
         let imagePath = updateArticleDto.image;
+        const { categoryIds, ...articleData } = updateArticleDto;
 
         if (imagePath && imagePath.startsWith('data:image')) {
             const ext = imagePath.split(';')[0].split('/')[1] || 'jpg';
-            // Use ID if available, or timestamp
             const fileName = `article-${existing.id}-${Date.now()}.${ext}`;
             imagePath = await this.fileUploadService.saveArticleImage(
                 imagePath,
@@ -60,15 +70,21 @@ export class ArticleService {
             );
         }
 
-        // Handle case where we only update part of DTO, preserving existing image if param is undefined
-        const dataToUpdate = { ...updateArticleDto };
+        const dataToUpdate: any = { ...articleData };
         if (imagePath) {
             dataToUpdate.image = imagePath;
+        }
+
+        if (categoryIds) {
+            dataToUpdate.categories = {
+                set: categoryIds.map(id => ({ id }))
+            };
         }
 
         return this.prisma.article.update({
             where: { slug },
             data: dataToUpdate,
+            include: { categories: true }
         });
     }
 

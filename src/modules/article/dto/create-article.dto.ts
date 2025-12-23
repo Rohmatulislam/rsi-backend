@@ -21,4 +21,8 @@ export class CreateArticleDto {
     @IsOptional()
     @IsBoolean()
     isActive?: boolean;
+
+    @IsOptional()
+    @IsString({ each: true })
+    categoryIds?: string[];
 }
