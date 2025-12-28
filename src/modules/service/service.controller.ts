@@ -4,18 +4,21 @@ import { CreateServiceDto } from './dto/create-service.dto';
 import { CreateServiceItemDto } from './dto/create-service-item.dto';
 import { UpdateServiceDto, UpdateServiceItemDto } from './dto/update-service.dto';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('services')
 export class ServiceController {
     constructor(private readonly serviceService: ServiceService) { }
 
     @Post()
+    @UseGuards(AdminGuard)
     create(@Body() createServiceDto: CreateServiceDto) {
         return this.serviceService.create(createServiceDto);
     }
 
     @Post('seed')
-    @AllowAnonymous()
+    @UseGuards(AdminGuard)
     seed() {
         return this.serviceService.seedDefaultServices();
     }
@@ -33,11 +36,13 @@ export class ServiceController {
     }
 
     @Patch(':id')
+    @UseGuards(AdminGuard)
     update(@Param('id') id: string, @Body() updateServiceDto: UpdateServiceDto) {
         return this.serviceService.update(id, updateServiceDto);
     }
 
     @Delete(':id')
+    @UseGuards(AdminGuard)
     remove(@Param('id') id: string) {
         return this.serviceService.remove(id);
     }
@@ -47,16 +52,19 @@ export class ServiceController {
     // ===========================================================================
 
     @Post('items')
+    @UseGuards(AdminGuard)
     createItem(@Body() createItemDto: CreateServiceItemDto) {
         return this.serviceService.createItem(createItemDto);
     }
 
     @Patch('items/:id')
+    @UseGuards(AdminGuard)
     updateItem(@Param('id') id: string, @Body() updateItemDto: UpdateServiceItemDto) {
         return this.serviceService.updateItem(id, updateItemDto);
     }
 
     @Delete('items/:id')
+    @UseGuards(AdminGuard)
     removeItem(@Param('id') id: string) {
         return this.serviceService.removeItem(id);
     }

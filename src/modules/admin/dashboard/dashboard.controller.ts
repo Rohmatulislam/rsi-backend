@@ -1,8 +1,9 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from '../admin.service';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AdminGuard } from '../../auth/guards/admin.guard';
 
 @Controller('admin/dashboard')
+@UseGuards(AdminGuard)
 export class DashboardController {
   constructor(private readonly adminService: AdminService) { }
 
@@ -11,7 +12,6 @@ export class DashboardController {
    * Returns total bookings, by status, and by period
    */
   @Get('stats')
-  @AllowAnonymous() // TODO: Add proper authentication in production
   async getDashboardStats() {
     return this.adminService.getDashboardStats();
   }
@@ -21,7 +21,6 @@ export class DashboardController {
    * @query period - 'day' | 'week' | 'month' | 'year'
    */
   @Get('booking-trends')
-  @AllowAnonymous()
   async getBookingTrends(@Query('period') period?: 'day' | 'week' | 'month' | 'year') {
     return this.adminService.getBookingTrends(period || 'week');
   }
@@ -31,7 +30,6 @@ export class DashboardController {
    * @query limit - number of doctors to return (default 10)
    */
   @Get('top-doctors')
-  @AllowAnonymous()
   async getTopDoctors(@Query('limit') limit?: string) {
     const parsedLimit = limit ? parseInt(limit, 10) : 10;
     return this.adminService.getTopDoctors(parsedLimit);
@@ -42,7 +40,6 @@ export class DashboardController {
    * @query limit - number of bookings to return (default 20)
    */
   @Get('recent-bookings')
-  @AllowAnonymous()
   async getRecentBookings(@Query('limit') limit?: string) {
     const parsedLimit = limit ? parseInt(limit, 10) : 20;
     return this.adminService.getRecentBookings(parsedLimit);

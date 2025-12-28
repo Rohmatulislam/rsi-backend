@@ -7,14 +7,15 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { SupabaseService } from '../../infra/supabase/supabase.service';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('upload')
 export class UploadController {
     constructor(private readonly supabaseService: SupabaseService) { }
 
     @Post()
-    @AllowAnonymous()
+    @UseGuards(AdminGuard)
     @UseInterceptors(FileInterceptor('file'))
     async uploadFile(@UploadedFile() file: any) {
         if (!file) {

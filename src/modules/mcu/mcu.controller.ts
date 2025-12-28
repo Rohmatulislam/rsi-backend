@@ -1,6 +1,8 @@
 import { Controller, Get, Post, Body, Param } from '@nestjs/common';
 import { McuApiService } from './mcu.service';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('mcu')
 export class McuController {

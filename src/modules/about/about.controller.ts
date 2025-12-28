@@ -5,6 +5,8 @@ import { UpdateFounderDto } from './dto/update-founder.dto';
 import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('about')
 export class AboutController {
@@ -15,6 +17,7 @@ export class AboutController {
     // ========================
 
     @Post('founders')
+    @UseGuards(AdminGuard)
     createFounder(@Body() createFounderDto: CreateFounderDto) {
         return this.aboutService.createFounder(createFounderDto);
     }
@@ -32,11 +35,13 @@ export class AboutController {
     }
 
     @Patch('founders/:id')
+    @UseGuards(AdminGuard)
     updateFounder(@Param('id') id: string, @Body() updateFounderDto: UpdateFounderDto) {
         return this.aboutService.updateFounder(id, updateFounderDto);
     }
 
     @Delete('founders/:id')
+    @UseGuards(AdminGuard)
     removeFounder(@Param('id') id: string) {
         return this.aboutService.removeFounder(id);
     }
@@ -46,6 +51,7 @@ export class AboutController {
     // ========================
 
     @Post('milestones')
+    @UseGuards(AdminGuard)
     createMilestone(@Body() createMilestoneDto: CreateMilestoneDto) {
         return this.aboutService.createMilestone(createMilestoneDto);
     }
@@ -63,11 +69,13 @@ export class AboutController {
     }
 
     @Patch('milestones/:id')
+    @UseGuards(AdminGuard)
     updateMilestone(@Param('id') id: string, @Body() updateMilestoneDto: UpdateMilestoneDto) {
         return this.aboutService.updateMilestone(id, updateMilestoneDto);
     }
 
     @Delete('milestones/:id')
+    @UseGuards(AdminGuard)
     removeMilestone(@Param('id') id: string) {
         return this.aboutService.removeMilestone(id);
     }
@@ -89,13 +97,13 @@ export class AboutController {
     }
 
     @Patch('content/:key')
-    @AllowAnonymous()
+    @UseGuards(AdminGuard)
     updateAboutContent(@Param('key') key: string, @Body('value') value: string) {
         return this.aboutService.upsertAboutContent(key, value);
     }
 
     @Post('content/initialize')
-    @AllowAnonymous()
+    @UseGuards(AdminGuard)
     initializeAboutContent() {
         return this.aboutService.initializeAboutContent();
     }
@@ -117,13 +125,13 @@ export class AboutController {
     }
 
     @Patch('values/:id')
-    @AllowAnonymous()
+    @UseGuards(AdminGuard)
     updateCoreValue(@Param('id') id: string, @Body() data: { title?: string; description?: string; icon?: string }) {
         return this.aboutService.updateCoreValue(id, data);
     }
 
     @Post('values/initialize')
-    @AllowAnonymous()
+    @UseGuards(AdminGuard)
     initializeCoreValues() {
         return this.aboutService.initializeCoreValues();
     }

@@ -17,6 +17,8 @@ import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { GetDoctorByIdDto } from './dto/get-doctor-by-id.dto';
 import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
 import { GetDoctorsDto } from './dto/get-doctors.dto';
+import { UseGuards } from '@nestjs/common';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('doctors')
 export class DoctorController {
@@ -46,6 +48,7 @@ export class DoctorController {
     return this.doctorService.findBySlug(slug);
   }
   @Post()
+  @UseGuards(AdminGuard)
   create(@Body() createDoctorDto: CreateDoctorDto) {
     return this.doctorService.create(createDoctorDto);
   }
@@ -58,16 +61,19 @@ export class DoctorController {
 
 
   @Patch(':id')
+  @UseGuards(AdminGuard)
   update(@Param('id') id: string, @Body() updateDoctorDto: UpdateDoctorDto) {
     return this.doctorService.update(id, updateDoctorDto);
   }
 
   @Patch(':id/image')
+  @UseGuards(AdminGuard)
   updateImage(@Param('id') id: string, @Body('imageUrl') imageUrl: string) {
     return this.doctorService.updateDoctorImage(id, imageUrl);
   }
 
   @Post(':id/upload-image')
+  @UseGuards(AdminGuard)
   @UseInterceptors(FileInterceptor('image', {
     limits: {
       fileSize: 5 * 1024 * 1024, // 5MB
@@ -99,20 +105,25 @@ export class DoctorController {
   }
 
   @Delete(':id')
+  @UseGuards(AdminGuard)
   remove(@Param('id') id: string) {
     return this.doctorService.remove(id);
   }
+
   @Post(':id/schedules')
+  @UseGuards(AdminGuard)
   addSchedule(@Param('id') id: string, @Body() createScheduleDto: any) {
     return this.doctorService.addSchedule(id, createScheduleDto);
   }
 
   @Patch('schedules/:id')
+  @UseGuards(AdminGuard)
   updateSchedule(@Param('id') id: string, @Body() updateScheduleDto: any) {
     return this.doctorService.updateSchedule(id, updateScheduleDto);
   }
 
   @Delete('schedules/:id')
+  @UseGuards(AdminGuard)
   removeSchedule(@Param('id') id: string) {
     return this.doctorService.removeSchedule(id);
   }
