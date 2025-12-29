@@ -8,6 +8,7 @@ export const auth = betterAuth({
   database: prismaAdapter(new PrismaService(), {
     provider: 'postgresql',
   }),
+  baseURL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: true,
@@ -41,6 +42,9 @@ export const auth = betterAuth({
         html: html,
       });
     },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
       const transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST || 'smtp.ethereal.email',
