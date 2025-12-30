@@ -1,13 +1,13 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from '../admin.service';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth'; // In production, this should be protected
+import { AdminGuard } from '../../auth/guards/admin.guard';
 
 @Controller('admin/appointments')
 export class AppointmentsController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(private readonly adminService: AdminService) { }
 
   @Get('reports')
-  @AllowAnonymous() // In production, add proper authentication
+  @UseGuards(AdminGuard)
   getAppointmentReport(
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,

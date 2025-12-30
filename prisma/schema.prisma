@@ -371,6 +371,21 @@ model ExcludedBed {
   @@map("excluded_beds")
 }
 
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  userEmail String
+  action    String
+  resource  String
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
 enum CategoryType {
   POLI
   SPECIALIST
