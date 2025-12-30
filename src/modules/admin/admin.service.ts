@@ -218,6 +218,20 @@ export class AdminService {
    * Legacy method - kept for backward compatibility
    */
   async getAppointmentReport(startDate?: Date, endDate?: Date) {
+    // [DEBUG] Mock data for testing
+    /*
+    const dummyAppointments = [{
+        id: 'debug-123',
+        patientName: 'DEBUG PASIEN',
+        patientId: 'RM001',
+        doctor: { name: 'Dr. Debug', specialization: 'Umum' },
+        appointmentDate: new Date().toISOString(),
+        status: 'scheduled',
+        notes: 'Debug note'
+    }];
+    return { total: 1, byStatus: { scheduled: 1, completed: 0, cancelled: 0 }, appointments: dummyAppointments };
+    */
+
     let appointments = await this.appointmentService.getAllAppointments();
 
     if (startDate && endDate) {
