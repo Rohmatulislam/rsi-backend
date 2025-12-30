@@ -14,14 +14,16 @@ export class SupabaseService {
 
         if (!this.supabaseUrl || !supabaseKey) {
             this.logger.warn('Supabase credentials not configured. File uploads will fail.');
+            // @ts-ignore
+            this.supabase = null;
+        } else {
+            this.supabase = createClient(this.supabaseUrl, supabaseKey, {
+                auth: {
+                    autoRefreshToken: false,
+                    persistSession: false
+                }
+            });
         }
-
-        this.supabase = createClient(this.supabaseUrl, supabaseKey, {
-            auth: {
-                autoRefreshToken: false,
-                persistSession: false
-            }
-        });
     }
 
     /**
