@@ -88,6 +88,37 @@ export class ArticleService {
         });
     }
 
+    async getRelated(slug: string, limit: number = 3) {
+        const article = await this.prisma.article.findUnique({
+            where: { slug },
+            include: { categories: true }
+        });
+
+        if (!article) throw new NotFoundException(`Article with slug ${slug} not found`);
+
+        const categoryIds = article.categories.map(c => c.id);
+
+        return this.prisma.article.findMany({
+            where: {
+                slug: { not: slug },
+                isActive: true,
+                status: 'PUBLISHED',
+                categories: {
+                    some: {
+                        id: { in: categoryIds }
+                    }
+                }
+            },
+            take: limit,
+            orderBy: {
+                publishedAt: 'desc'
+            },
+            include: {
+                categories: true
+            }
+        });
+    }
+
     async remove(slug: string) {
         const existing = await this.prisma.article.findUnique({ where: { slug } });
         if (existing && existing.image && existing.image.startsWith('/uploads')) {

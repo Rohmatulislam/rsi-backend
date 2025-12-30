@@ -27,6 +27,12 @@ export class ArticleController {
         return this.articleService.findOne(slug);
     }
 
+    @Get(':slug/related')
+    @AllowAnonymous()
+    getRelated(@Param('slug') slug: string) {
+        return this.articleService.getRelated(slug);
+    }
+
     @Patch(':slug')
     @UseGuards(AdminGuard)
     update(@Param('slug') slug: string, @Body() updateArticleDto: UpdateArticleDto) {
