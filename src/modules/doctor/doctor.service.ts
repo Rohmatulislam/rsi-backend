@@ -60,10 +60,20 @@ export class DoctorService {
   }
 
   async syncDoctors() {
-    const kDoctors = await this.khanzaService.getDoctors();
-    const kSchedules = await this.khanzaService.getDoctorSchedules();
-    const kPolis = await this.khanzaService.getPoliklinik();
-    const kSpesialis = await this.khanzaService.getSpesialis();
+    let kDoctors = [];
+    let kSchedules = [];
+    let kPolis = [];
+    let kSpesialis = [];
+
+    try {
+      kDoctors = await this.khanzaService.getDoctors();
+      kSchedules = await this.khanzaService.getDoctorSchedules();
+      kPolis = await this.khanzaService.getPoliklinik();
+      kSpesialis = await this.khanzaService.getSpesialis();
+    } catch (error) {
+      console.error('❌ [SYNC_DOCTORS] Error fetching from Khanza:', error.message);
+      throw new Error(`Gagal mengambil data dari SIMRS: ${error.message}`);
+    }
 
     let syncedCount = 0;
 
@@ -272,8 +282,15 @@ export class DoctorService {
 
   // TODO: Implement recommended doctors algorithm
   private async getRecommendedDoctors(limit: number) {
-    const kDoctors = await this.khanzaService.getDoctors();
-    const kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
+    let kDoctors = [];
+    let kSchedules = [];
+
+    try {
+      kDoctors = await this.khanzaService.getDoctors();
+      kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
+    } catch (error) {
+      console.error('❌ [RECOMMENDED_LEGACY] Error fetching from Khanza:', error.message);
+    }
 
     // Filter doctors that have schedules
     const doctorsWithSchedules = kDoctors.filter(kDoctor =>
@@ -473,23 +490,27 @@ export class DoctorService {
     });
 
     if (doctor && doctor.kd_dokter) {
-      // Get schedule details from Khanza including poli information
-      const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
+      try {
+        // Get schedule details from Khanza including poli information
+        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
 
-      if (kSchedules && kSchedules.length > 0) {
-        const scheduleDetails = kSchedules.map(schedule => ({
-          kd_poli: schedule.kd_poli,
-          nm_poli: schedule.nm_poli,
-          hari_kerja: schedule.hari_kerja,
-          jam_mulai: schedule.jam_mulai,
-          jam_selesai: schedule.jam_selesai,
-          kuota: schedule.kuota,
-        }));
+        if (kSchedules && kSchedules.length > 0) {
+          const scheduleDetails = kSchedules.map(schedule => ({
+            kd_poli: schedule.kd_poli,
+            nm_poli: schedule.nm_poli,
+            hari_kerja: schedule.hari_kerja,
+            jam_mulai: schedule.jam_mulai,
+            jam_selesai: schedule.jam_selesai,
+            kuota: schedule.kuota,
+          }));
 
-        return {
-          ...doctor,
-          scheduleDetails
-        };
+          return {
+            ...doctor,
+            scheduleDetails
+          };
+        }
+      } catch (error) {
+        console.error(`❌ [FIND_ONE] Error fetching from Khanza for doctor ${doctor.kd_dokter}:`, error.message);
       }
     }
 
@@ -596,23 +617,27 @@ export class DoctorService {
     });
 
     if (doctor && doctor.kd_dokter) {
-      // Get schedule details from Khanza including poli information
-      const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
+      try {
+        // Get schedule details from Khanza including poli information
+        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
 
-      if (kSchedules && kSchedules.length > 0) {
-        const scheduleDetails = kSchedules.map(schedule => ({
-          kd_poli: schedule.kd_poli,
-          nm_poli: schedule.nm_poli,
-          hari_kerja: schedule.hari_kerja,
-          jam_mulai: schedule.jam_mulai,
-          jam_selesai: schedule.jam_selesai,
-          kuota: schedule.kuota,
-        }));
+        if (kSchedules && kSchedules.length > 0) {
+          const scheduleDetails = kSchedules.map(schedule => ({
+            kd_poli: schedule.kd_poli,
+            nm_poli: schedule.nm_poli,
+            hari_kerja: schedule.hari_kerja,
+            jam_mulai: schedule.jam_mulai,
+            jam_selesai: schedule.jam_selesai,
+            kuota: schedule.kuota,
+          }));
 
-        return {
-          ...doctor,
-          scheduleDetails
-        };
+          return {
+            ...doctor,
+            scheduleDetails
+          };
+        }
+      } catch (error) {
+        console.error(`❌ [FIND_BY_SLUG] Error fetching from Khanza for doctor ${doctor.kd_dokter}:`, error.message);
       }
     }
 
@@ -660,23 +685,27 @@ export class DoctorService {
       });
 
       if (idBasedDoctor && idBasedDoctor.kd_dokter) {
-        // Get schedule details from Khanza including poli information
-        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(idBasedDoctor.kd_dokter);
+        try {
+          // Get schedule details from Khanza including poli information
+          const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(idBasedDoctor.kd_dokter);
 
-        if (kSchedules && kSchedules.length > 0) {
-          const scheduleDetails = kSchedules.map(schedule => ({
-            kd_poli: schedule.kd_poli,
-            nm_poli: schedule.nm_poli,
-            hari_kerja: schedule.hari_kerja,
-            jam_mulai: schedule.jam_mulai,
-            jam_selesai: schedule.jam_selesai,
-            kuota: schedule.kuota,
-          }));
+          if (kSchedules && kSchedules.length > 0) {
+            const scheduleDetails = kSchedules.map(schedule => ({
+              kd_poli: schedule.kd_poli,
+              nm_poli: schedule.nm_poli,
+              hari_kerja: schedule.hari_kerja,
+              jam_mulai: schedule.jam_mulai,
+              jam_selesai: schedule.jam_selesai,
+              kuota: schedule.kuota,
+            }));
 
-          return {
-            ...idBasedDoctor,
-            scheduleDetails
-          };
+            return {
+              ...idBasedDoctor,
+              scheduleDetails
+            };
+          }
+        } catch (error) {
+          console.error(`❌ [FIND_BY_ID_FALLBACK] Error fetching from Khanza for doctor ${idBasedDoctor.kd_dokter}:`, error.message);
         }
       }
 
