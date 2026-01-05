@@ -59,6 +59,10 @@ export class DoctorService {
     return await this.khanzaService.getPaymentMethods();
   }
 
+  async getKhanzaStatus() {
+    return await this.khanzaService.getConnectionStatus();
+  }
+
   async syncDoctors() {
     let kDoctors = [];
     let kSchedules = [];

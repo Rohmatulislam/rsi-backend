@@ -59,6 +59,12 @@ export class DoctorController {
     return this.doctorService.syncDoctors();
   }
 
+  @Get('health/khanza')
+  @AllowAnonymous() // For diagnostic purposes
+  health() {
+    return this.doctorService.getKhanzaStatus();
+  }
+
 
   @Patch(':id')
   @UseGuards(AdminGuard)
