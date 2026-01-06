@@ -15,6 +15,15 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     # Tunggu koneksi stabil
     sleep 5
     
+    # Debug: Tampilkan status Tailscale
+    echo "--- TAILSCALE DEBUG INFO ---"
+    echo "My Tailscale IP:"
+    tailscale ip -4 || echo "Failed to get IP"
+    echo ""
+    echo "Tailscale Status:"
+    tailscale status || echo "Failed to get status"
+    echo "--- END DEBUG ---"
+    
     # Tunggu sampai peer 100.73.168.57 bisa dijangkau (max 60 detik)
     echo "Waiting for Khanza peer (100.73.168.57) to be reachable..."
     PEER_IP="100.73.168.57"
@@ -31,7 +40,9 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
         fi
         
         if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
-            echo "⚠️ WARNING: Could not reach peer after $MAX_ATTEMPTS attempts. Continuing anyway..."
+            echo "⚠️ WARNING: Could not reach peer after $MAX_ATTEMPTS attempts."
+            echo "Trying direct tailscale nc test..."
+            echo "quit" | timeout 10 tailscale nc $PEER_IP 3306 && echo "✅ NC test succeeded!" || echo "❌ NC test failed"
         fi
         
         sleep 5
@@ -45,6 +56,7 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     # Tunggu sebentar agar socat siap
     sleep 2
 fi
+
 
 
 # Jalankan persiapan database
