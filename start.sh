@@ -57,37 +57,37 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     # Tunggu sebentar agar socat siap
     sleep 3
     
-    # Test koneksi melalui socat bridge sebelum app dimulai
-    echo "--- TESTING BRIDGE CONNECTION ---"
-    MAX_BRIDGE_ATTEMPTS=10
-    BRIDGE_ATTEMPT=0
-    BRIDGE_READY=false
+    # Test koneksi langsung ke MySQL melalui Tailscale (tanpa netcat)
+    echo "--- VERIFYING TAILSCALE CONNECTION ---"
+    MAX_VERIFY=5
+    VERIFY_ATTEMPT=0
+    VERIFIED=false
     
-    while [ $BRIDGE_ATTEMPT -lt $MAX_BRIDGE_ATTEMPTS ]; do
-        BRIDGE_ATTEMPT=$((BRIDGE_ATTEMPT + 1))
-        echo "Bridge test attempt $BRIDGE_ATTEMPT/$MAX_BRIDGE_ATTEMPTS..."
+    while [ $VERIFY_ATTEMPT -lt $MAX_VERIFY ]; do
+        VERIFY_ATTEMPT=$((VERIFY_ATTEMPT + 1))
+        echo "Verify attempt $VERIFY_ATTEMPT/$MAX_VERIFY..."
         
-        # Test koneksi ke socat bridge menggunakan nc
-        if echo "" | timeout 10 nc -z 127.0.0.1 3307 2>/dev/null; then
-            echo "✅ Bridge port 3307 is open!"
-            # Double-check dengan tailscale nc langsung
-            if echo "quit" | timeout 15 tailscale nc 100.73.168.57 3306 2>/dev/null; then
-                echo "✅ MySQL connection through Tailscale verified!"
-                BRIDGE_READY=true
-                break
-            fi
+        # Test dengan tailscale nc - kirim data minimal dan cek response
+        if echo "" | timeout 10 tailscale nc 100.73.168.57 3306 2>/dev/null; then
+            echo "✅ Tailscale connection to MySQL verified!"
+            VERIFIED=true
+            break
         fi
         
-        echo "Waiting for bridge to be ready..."
+        echo "Waiting for connection..."
         sleep 5
     done
     
-    if [ "$BRIDGE_READY" = "true" ]; then
-        echo "🎉 Bridge is ready! Proceeding to start app..."
+    if [ "$VERIFIED" = "true" ]; then
+        echo "🎉 Connection verified! Proceeding to start app..."
     else
-        echo "⚠️ Bridge test failed, but continuing anyway..."
+        echo "⚠️ Could not verify connection, but continuing anyway..."
     fi
+    
+    # Extra wait untuk memastikan koneksi stabil
+    sleep 5
 fi
+
 
 
 
