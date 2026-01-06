@@ -52,10 +52,43 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     # Bind ke 0.0.0.0 agar bisa diakses dari Docker bridge network (172.17.0.1)
     echo "Starting tailscale bridge: 0.0.0.0:3307 -> 100.73.168.57:3306"
     socat TCP-LISTEN:3307,bind=0.0.0.0,fork,reuseaddr EXEC:"tailscale nc 100.73.168.57 3306" &
+    SOCAT_PID=$!
     
     # Tunggu sebentar agar socat siap
-    sleep 2
+    sleep 3
+    
+    # Test koneksi melalui socat bridge sebelum app dimulai
+    echo "--- TESTING BRIDGE CONNECTION ---"
+    MAX_BRIDGE_ATTEMPTS=10
+    BRIDGE_ATTEMPT=0
+    BRIDGE_READY=false
+    
+    while [ $BRIDGE_ATTEMPT -lt $MAX_BRIDGE_ATTEMPTS ]; do
+        BRIDGE_ATTEMPT=$((BRIDGE_ATTEMPT + 1))
+        echo "Bridge test attempt $BRIDGE_ATTEMPT/$MAX_BRIDGE_ATTEMPTS..."
+        
+        # Test koneksi ke socat bridge menggunakan nc
+        if echo "" | timeout 10 nc -z 127.0.0.1 3307 2>/dev/null; then
+            echo "✅ Bridge port 3307 is open!"
+            # Double-check dengan tailscale nc langsung
+            if echo "quit" | timeout 15 tailscale nc 100.73.168.57 3306 2>/dev/null; then
+                echo "✅ MySQL connection through Tailscale verified!"
+                BRIDGE_READY=true
+                break
+            fi
+        fi
+        
+        echo "Waiting for bridge to be ready..."
+        sleep 5
+    done
+    
+    if [ "$BRIDGE_READY" = "true" ]; then
+        echo "🎉 Bridge is ready! Proceeding to start app..."
+    else
+        echo "⚠️ Bridge test failed, but continuing anyway..."
+    fi
 fi
+
 
 
 
