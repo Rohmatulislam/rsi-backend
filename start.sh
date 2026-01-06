@@ -16,9 +16,10 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     sleep 5
     
     # Jembatan lokal (socat + tailscale nc):
-    # Ini metode paling stabil yang tidak bergantung pada versi SOCKS.
-    echo "Starting tailscale bridge: localhost:3307 -> 100.73.168.57:3306"
-    socat TCP-LISTEN:3307,fork,reuseaddr EXEC:"tailscale nc 100.73.168.57 3306" &
+    # Bind ke 0.0.0.0 agar bisa diakses dari Docker bridge network (172.17.0.1)
+    echo "Starting tailscale bridge: 0.0.0.0:3306 -> 100.73.168.57:3306"
+    socat TCP-LISTEN:3306,bind=0.0.0.0,fork,reuseaddr EXEC:"tailscale nc 100.73.168.57 3306" &
+
     
     # Tunggu sebentar agar socat siap
     sleep 2
