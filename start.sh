@@ -15,16 +15,37 @@ if [ -n "$TAILSCALE_AUTH_KEY" ]; then
     # Tunggu koneksi stabil
     sleep 5
     
+    # Tunggu sampai peer 100.73.168.57 bisa dijangkau (max 60 detik)
+    echo "Waiting for Khanza peer (100.73.168.57) to be reachable..."
+    PEER_IP="100.73.168.57"
+    MAX_ATTEMPTS=12
+    ATTEMPT=0
+    
+    while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+        ATTEMPT=$((ATTEMPT + 1))
+        echo "Ping attempt $ATTEMPT/$MAX_ATTEMPTS..."
+        
+        if tailscale ping $PEER_IP --timeout=5s 2>/dev/null; then
+            echo "✅ Peer $PEER_IP is reachable!"
+            break
+        fi
+        
+        if [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+            echo "⚠️ WARNING: Could not reach peer after $MAX_ATTEMPTS attempts. Continuing anyway..."
+        fi
+        
+        sleep 5
+    done
+    
     # Jembatan lokal (socat + tailscale nc):
     # Bind ke 0.0.0.0 agar bisa diakses dari Docker bridge network (172.17.0.1)
     echo "Starting tailscale bridge: 0.0.0.0:3307 -> 100.73.168.57:3306"
     socat TCP-LISTEN:3307,bind=0.0.0.0,fork,reuseaddr EXEC:"tailscale nc 100.73.168.57 3306" &
-
-
     
     # Tunggu sebentar agar socat siap
     sleep 2
 fi
+
 
 # Jalankan persiapan database
 echo "--- PREPARING DATABASE SCHEMA ---"
