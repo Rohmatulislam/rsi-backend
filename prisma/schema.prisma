@@ -386,6 +386,17 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model SiteStats {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  value        Int      @default(0)
+  lastUpdated  DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("site_stats")
+}
+
 enum CategoryType {
   POLI
   SPECIALIST

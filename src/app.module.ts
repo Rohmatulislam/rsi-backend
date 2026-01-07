@@ -28,6 +28,7 @@ import { BannerModule } from './modules/banner/banner.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { CategoryModule } from './modules/category/category.module';
+import { StatsModule } from './modules/stats/stats.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { CategoryModule } from './modules/category/category.module';
     UploadModule,
     ChatModule,
     CategoryModule,
+    StatsModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100,
