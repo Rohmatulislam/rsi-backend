@@ -15,18 +15,18 @@ export const auth = betterAuth({
     sendResetPassword: async ({ user, url }) => {
       // ... same logic
       const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-        port: parseInt(process.env.SMTP_PORT || '587'),
+        host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
+        port: parseInt(process.env.EMAIL_PORT || '587'),
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
         },
       });
 
       const resetLink = url;
       const html = `<p>Halo ${user.name},</p><p>Anda meminta untuk mengatur ulang kata sandi. Silakan klik tautan di bawah ini:</p><p><a href="${resetLink}">${resetLink}</a></p><p>Jika Anda tidak meminta ini, abaikan email ini.</p>`;
 
-      if (!process.env.SMTP_HOST) {
+      if (!process.env.EMAIL_HOST) {
         console.log('--- RESET PASSWORD EMAIL MOCK ---');
         console.log(`To: ${user.email}`);
         console.log(`Subject: Reset Password`);
@@ -47,18 +47,18 @@ export const auth = betterAuth({
     sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
       const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-        port: parseInt(process.env.SMTP_PORT || '587'),
+        host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
+        port: parseInt(process.env.EMAIL_PORT || '587'),
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
         },
       });
 
       const verificationLink = url;
       const html = `<p>Halo ${user.name},</p><p>Terima kasih telah mendaftar. Silakan verifikasi email Anda dengan mengklik tautan di bawah ini:</p><p><a href="${verificationLink}">${verificationLink}</a></p>`;
 
-      if (!process.env.SMTP_HOST) {
+      if (!process.env.EMAIL_HOST) {
         console.log('--- VERIFICATION EMAIL MOCK ---');
         console.log(`To: ${user.email}`);
         console.log(`Subject: Verifikasi Email`);
@@ -81,15 +81,15 @@ export const auth = betterAuth({
       // Setup nodemailer transport
       // If SMTP details are missing, it will log to console (useful for dev)
       const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-        port: parseInt(process.env.SMTP_PORT || '587'),
+        host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
+        port: parseInt(process.env.EMAIL_PORT || '587'),
         auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS,
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS,
         },
       });
 
-      if (!process.env.SMTP_HOST) {
+      if (!process.env.EMAIL_HOST) {
         console.log('--- EMAIL MOCK ---');
         console.log(`To: ${to}`);
         console.log(`Subject: ${subject}`);
