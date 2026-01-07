@@ -47,34 +47,51 @@ export const auth = betterAuth({
   emailVerification: {
     sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
-      const transporter = nodemailer.createTransport({
-        host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
-        port: parseInt(process.env.EMAIL_PORT || '587'),
-        secure: false, // Use STARTTLS for port 587
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
+      console.log('[EMAIL DEBUG] Attempting to send verification email...');
+      console.log('[EMAIL DEBUG] SMTP Config:', {
+        host: process.env.EMAIL_HOST,
+        port: process.env.EMAIL_PORT,
+        user: process.env.EMAIL_USER,
+        passLength: process.env.EMAIL_PASS?.length || 0,
+        from: process.env.EMAIL_FROM,
       });
 
-      const verificationLink = url;
-      const html = `<p>Halo ${user.name},</p><p>Terima kasih telah mendaftar. Silakan verifikasi email Anda dengan mengklik tautan di bawah ini:</p><p><a href="${verificationLink}">${verificationLink}</a></p>`;
+      try {
+        const transporter = nodemailer.createTransport({
+          host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
+          port: parseInt(process.env.EMAIL_PORT || '587'),
+          secure: false, // Use STARTTLS for port 587
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        });
 
-      if (!process.env.EMAIL_HOST) {
-        console.log('--- VERIFICATION EMAIL MOCK ---');
-        console.log(`To: ${user.email}`);
-        console.log(`Subject: Verifikasi Email`);
-        console.log(`Link: ${verificationLink}`);
-        console.log('-------------------------------');
-        return;
+        const verificationLink = url;
+        const html = `<p>Halo ${user.name},</p><p>Terima kasih telah mendaftar. Silakan verifikasi email Anda dengan mengklik tautan di bawah ini:</p><p><a href="${verificationLink}">${verificationLink}</a></p>`;
+
+        if (!process.env.EMAIL_HOST) {
+          console.log('--- VERIFICATION EMAIL MOCK ---');
+          console.log(`To: ${user.email}`);
+          console.log(`Subject: Verifikasi Email`);
+          console.log(`Link: ${verificationLink}`);
+          console.log('-------------------------------');
+          return;
+        }
+
+        console.log('[EMAIL DEBUG] Sending email to:', user.email);
+        const result = await transporter.sendMail({
+          from: process.env.EMAIL_FROM || 'no-reply@rsi.com',
+          to: user.email,
+          subject: 'Verifikasi Email - RSI',
+          html: html,
+        });
+        console.log('[EMAIL DEBUG] Email sent successfully:', result.messageId);
+      } catch (error) {
+        console.error('[EMAIL ERROR] Failed to send verification email:', error);
+        // Re-throw to let better-auth handle the error properly
+        throw error;
       }
-
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'no-reply@rsi.com',
-        to: user.email,
-        subject: 'Verifikasi Email - RSI',
-        html: html,
-      });
     },
   },
   email: {
