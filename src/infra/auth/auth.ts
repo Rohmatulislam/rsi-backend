@@ -2,7 +2,40 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { PrismaService } from '../database/prisma.service';
 import { bearer } from 'better-auth/plugins';
-import * as nodemailer from 'nodemailer';
+import { Resend } from 'resend';
+
+// Initialize Resend client
+const resend = new Resend(process.env.RESEND_API_KEY);
+const emailFrom = process.env.EMAIL_FROM || 'RSI Hospital <onboarding@resend.dev>';
+
+// Helper function to send email via Resend
+async function sendEmailViaResend(to: string, subject: string, html: string) {
+  console.log('[RESEND] Sending email to:', to);
+  console.log('[RESEND] API Key exists:', !!process.env.RESEND_API_KEY);
+
+  if (!process.env.RESEND_API_KEY) {
+    console.log('--- EMAIL MOCK (No API Key) ---');
+    console.log(`To: ${to}`);
+    console.log(`Subject: ${subject}`);
+    console.log(`HTML: ${html}`);
+    console.log('-------------------------------');
+    return;
+  }
+
+  try {
+    const result = await resend.emails.send({
+      from: emailFrom,
+      to: [to],
+      subject: subject,
+      html: html,
+    });
+    console.log('[RESEND] Email sent successfully:', result);
+    return result;
+  } catch (error) {
+    console.error('[RESEND ERROR]', error);
+    throw error;
+  }
+}
 
 export const auth = betterAuth({
   database: prismaAdapter(new PrismaService(), {
@@ -13,117 +46,21 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: true,
     sendResetPassword: async ({ user, url }) => {
-      // ... same logic
-      const transporter = nodemailer.createTransport({
-        host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
-        port: parseInt(process.env.EMAIL_PORT || '587'),
-        secure: false, // Use STARTTLS for port 587
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-
-      const resetLink = url;
-      const html = `<p>Halo ${user.name},</p><p>Anda meminta untuk mengatur ulang kata sandi. Silakan klik tautan di bawah ini:</p><p><a href="${resetLink}">${resetLink}</a></p><p>Jika Anda tidak meminta ini, abaikan email ini.</p>`;
-
-      if (!process.env.EMAIL_HOST) {
-        console.log('--- RESET PASSWORD EMAIL MOCK ---');
-        console.log(`To: ${user.email}`);
-        console.log(`Subject: Reset Password`);
-        console.log(`Link: ${resetLink}`);
-        console.log('---------------------------------');
-        return;
-      }
-
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'no-reply@rsi.com',
-        to: user.email,
-        subject: 'Atur Ulang Kata Sandi - RSI',
-        html: html,
-      });
+      const html = `<p>Halo ${user.name},</p><p>Anda meminta untuk mengatur ulang kata sandi. Silakan klik tautan di bawah ini:</p><p><a href="${url}">${url}</a></p><p>Jika Anda tidak meminta ini, abaikan email ini.</p>`;
+      await sendEmailViaResend(user.email, 'Atur Ulang Kata Sandi - RSI', html);
     },
   },
   emailVerification: {
     sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
-      console.log('[EMAIL DEBUG] Attempting to send verification email...');
-      console.log('[EMAIL DEBUG] SMTP Config:', {
-        host: process.env.EMAIL_HOST,
-        port: process.env.EMAIL_PORT,
-        user: process.env.EMAIL_USER,
-        passLength: process.env.EMAIL_PASS?.length || 0,
-        from: process.env.EMAIL_FROM,
-      });
-
-      try {
-        const transporter = nodemailer.createTransport({
-          host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
-          port: parseInt(process.env.EMAIL_PORT || '587'),
-          secure: false, // Use STARTTLS for port 587
-          auth: {
-            user: process.env.EMAIL_USER,
-            pass: process.env.EMAIL_PASS,
-          },
-        });
-
-        const verificationLink = url;
-        const html = `<p>Halo ${user.name},</p><p>Terima kasih telah mendaftar. Silakan verifikasi email Anda dengan mengklik tautan di bawah ini:</p><p><a href="${verificationLink}">${verificationLink}</a></p>`;
-
-        if (!process.env.EMAIL_HOST) {
-          console.log('--- VERIFICATION EMAIL MOCK ---');
-          console.log(`To: ${user.email}`);
-          console.log(`Subject: Verifikasi Email`);
-          console.log(`Link: ${verificationLink}`);
-          console.log('-------------------------------');
-          return;
-        }
-
-        console.log('[EMAIL DEBUG] Sending email to:', user.email);
-        const result = await transporter.sendMail({
-          from: process.env.EMAIL_FROM || 'no-reply@rsi.com',
-          to: user.email,
-          subject: 'Verifikasi Email - RSI',
-          html: html,
-        });
-        console.log('[EMAIL DEBUG] Email sent successfully:', result.messageId);
-      } catch (error) {
-        console.error('[EMAIL ERROR] Failed to send verification email:', error);
-        // Re-throw to let better-auth handle the error properly
-        throw error;
-      }
+      const html = `<p>Halo ${user.name},</p><p>Terima kasih telah mendaftar. Silakan verifikasi email Anda dengan mengklik tautan di bawah ini:</p><p><a href="${url}">${url}</a></p>`;
+      await sendEmailViaResend(user.email, 'Verifikasi Email - RSI', html);
     },
   },
   email: {
-    from: process.env.EMAIL_FROM || 'no-reply@rsi.com',
+    from: emailFrom,
     sendEmail: async ({ to, subject, body }) => {
-      // Setup nodemailer transport
-      // If SMTP details are missing, it will log to console (useful for dev)
-      const transporter = nodemailer.createTransport({
-        host: process.env.EMAIL_HOST || 'smtp.ethereal.email',
-        port: parseInt(process.env.EMAIL_PORT || '587'),
-        secure: false, // Use STARTTLS for port 587
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS,
-        },
-      });
-
-      if (!process.env.EMAIL_HOST) {
-        console.log('--- EMAIL MOCK ---');
-        console.log(`To: ${to}`);
-        console.log(`Subject: ${subject}`);
-        console.log(`Body: ${body}`);
-        console.log('------------------');
-        return;
-      }
-
-      await transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'no-reply@rsi.com',
-        to,
-        subject,
-        html: body,
-      });
+      await sendEmailViaResend(to, subject, body);
     },
   },
   trustedOrigins: process.env.ALLOWED_ORIGINS
