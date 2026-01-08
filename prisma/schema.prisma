@@ -415,3 +415,16 @@ enum ArticleStatus {
   PUBLISHED
   ARCHIVED
 }
+
+model Partner {
+  id        String   @id @default(cuid())
+  name      String
+  imageUrl  String
+  link      String?
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("partners")
+}

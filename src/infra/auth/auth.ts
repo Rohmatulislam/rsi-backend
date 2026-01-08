@@ -4,16 +4,24 @@ import { PrismaService } from '../database/prisma.service';
 import { bearer } from 'better-auth/plugins';
 import { Resend } from 'resend';
 
-// Initialize Resend client
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend client lazily to prevent crash if API key is missing
+let resend: Resend | null = null;
+const getResendClient = () => {
+  if (!resend && process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return resend;
+};
+
 const emailFrom = process.env.EMAIL_FROM || 'RSI Hospital <onboarding@resend.dev>';
 
 // Helper function to send email via Resend
 async function sendEmailViaResend(to: string, subject: string, html: string) {
+  const client = getResendClient();
   console.log('[RESEND] Sending email to:', to);
   console.log('[RESEND] API Key exists:', !!process.env.RESEND_API_KEY);
 
-  if (!process.env.RESEND_API_KEY) {
+  if (!client) {
     console.log('--- EMAIL MOCK (No API Key) ---');
     console.log(`To: ${to}`);
     console.log(`Subject: ${subject}`);
@@ -23,7 +31,7 @@ async function sendEmailViaResend(to: string, subject: string, html: string) {
   }
 
   try {
-    const result = await resend.emails.send({
+    const result = await client.emails.send({
       from: emailFrom,
       to: [to],
       subject: subject,

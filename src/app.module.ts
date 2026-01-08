@@ -29,6 +29,7 @@ import { UploadModule } from './modules/upload/upload.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { CategoryModule } from './modules/category/category.module';
 import { StatsModule } from './modules/stats/stats.module';
+import { PartnerModule } from './modules/partner/partner.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { StatsModule } from './modules/stats/stats.module';
     ChatModule,
     CategoryModule,
     StatsModule,
+    PartnerModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100,
