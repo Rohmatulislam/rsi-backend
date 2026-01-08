@@ -38,7 +38,9 @@ export class PartnerUploadService {
             }
 
             // Decode base64
-            const base64Data = base64Image.replace(/^data:image\/\w+;base64,/, '');
+            const base64Data = base64Image.includes(';base64,')
+                ? base64Image.split(';base64,').pop() || ''
+                : base64Image;
 
             // Upload to Supabase Storage
             const publicUrl = await this.supabaseService.uploadFile(

@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsBoolean, IsUrl } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsInt, IsBoolean, IsUrl, ValidateIf } from 'class-validator';
 
 export class CreatePartnerDto {
     @IsString()
@@ -11,7 +11,8 @@ export class CreatePartnerDto {
 
     @IsString()
     @IsOptional()
-    @IsUrl()
+    @ValidateIf((o) => o.link !== "" && o.link !== null && o.link !== undefined)
+    @IsUrl({}, { message: 'Link must be a valid URL' })
     link?: string;
 
     @IsInt()
