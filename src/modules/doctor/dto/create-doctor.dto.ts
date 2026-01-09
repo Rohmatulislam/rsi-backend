@@ -77,4 +77,12 @@ export class CreateDoctorDto {
   @IsBoolean()
   @IsOptional()
   isActive?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isStudying?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isOnLeave?: boolean;
 }

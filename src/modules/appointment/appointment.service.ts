@@ -403,7 +403,10 @@ export class AppointmentService {
           select: {
             name: true,
             specialization: true,
-            imageUrl: true
+            imageUrl: true,
+            isActive: true,
+            isStudying: true,
+            isOnLeave: true
           }
         },
         notifications: {
@@ -440,7 +443,10 @@ export class AppointmentService {
           select: {
             name: true,
             specialization: true,
-            imageUrl: true
+            imageUrl: true,
+            isActive: true,
+            isStudying: true,
+            isOnLeave: true
           }
         },
         notifications: {
@@ -535,7 +541,10 @@ export class AppointmentService {
           select: {
             name: true,
             specialization: true,
-            imageUrl: true
+            imageUrl: true,
+            isActive: true,
+            isStudying: true,
+            isOnLeave: true
           }
         }
       },

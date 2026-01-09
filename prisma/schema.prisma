@@ -28,6 +28,8 @@ model Doctor {
   kd_dokter          String?       @unique
   description        String?
   isActive           Boolean       @default(true)
+  isStudying         Boolean       @default(false)
+  isOnLeave          Boolean       @default(false)
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
   appointments       Appointment[]

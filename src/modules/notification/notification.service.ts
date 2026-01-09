@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infra/database/prisma.service';
 import axios from 'axios';
+import * as nodemailer from 'nodemailer';
 
 export interface NotificationPayload {
   patientName: string;
@@ -20,6 +21,8 @@ export class NotificationService {
   private readonly fonntteApiUrl = 'https://api.fonnte.com/send';
   private readonly fonttneToken: string;
   private readonly whatsappEnabled: boolean;
+  private readonly transporter: nodemailer.Transporter;
+  private readonly emailFrom: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -33,6 +36,20 @@ export class NotificationService {
     } else {
       this.logger.warn('⚠️ WhatsApp notification disabled - FONNTE_TOKEN not configured');
     }
+
+    // Initialize Email Transporter
+    this.emailFrom = this.configService.get('EMAIL_FROM') || 'RSI Hospital <noreply@rsi-hospital.com>';
+    this.transporter = nodemailer.createTransport({
+      host: this.configService.get('EMAIL_HOST'),
+      port: this.configService.get('EMAIL_PORT'),
+      secure: this.configService.get('EMAIL_SECURE') === 'true',
+      auth: {
+        user: this.configService.get('EMAIL_USER'),
+        pass: this.configService.get('EMAIL_PASS'),
+      },
+    });
+
+    this.logger.log('📧 Email notification service initialized');
   }
 
   // Format phone number for WhatsApp (remove leading 0, add 62)
@@ -88,6 +105,38 @@ export class NotificationService {
       }
     } catch (error) {
       this.logger.error(`❌ WhatsApp send error: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Send Email
+  private async sendEmail(to: string, subject: string, message: string): Promise<boolean> {
+    if (!to) return false;
+
+    try {
+      await this.transporter.sendMail({
+        from: this.emailFrom,
+        to,
+        subject,
+        text: message.replace(/[*_]/g, ''), // Strip markdown simple formatting for text version
+        html: `
+          <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
+            <div style="background-color: #0b1e33; color: white; padding: 20px; text-align: center;">
+              <h1 style="margin: 0;">RSI Hospital</h1>
+            </div>
+            <div style="padding: 30px;">
+              ${message.split('\n').map(line => line.trim() ? `<p style="margin: 10px 0;">${line}</p>` : '<br/>').join('')}
+            </div>
+            <div style="background-color: #f9f9f9; color: #777; padding: 15px; text-align: center; font-size: 12px; border-top: 1px solid #eee;">
+              Pesan ini dikirim otomatis oleh sistem RSI Hospital
+            </div>
+          </div>
+        `
+      });
+      this.logger.log(`✅ Email sent to ${to}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`❌ Email send error: ${error.message}`);
       return false;
     }
   }
@@ -179,6 +228,50 @@ export class NotificationService {
     });
 
     this.logger.log(`Booking reschedule ${sent ? 'sent' : 'logged'} for ${patientName}`);
+  }
+
+  async sendDoctorLeaveNotification(payload: {
+    patientName: string;
+    patientPhone: string;
+    patientEmail?: string;
+    doctorName: string;
+    appointmentDate: string;
+    appointmentTime: string;
+    bookingCode: string;
+  }, appointmentId?: string): Promise<{ whatsapp: boolean; email: boolean }> {
+    const { patientName, patientPhone, patientEmail, doctorName, appointmentDate, appointmentTime, bookingCode } = payload;
+
+    const message = this.generateDoctorLeaveMessage({
+      patientName,
+      doctorName,
+      appointmentDate,
+      appointmentTime,
+      bookingCode
+    });
+
+    // Send via WhatsApp
+    const whatsappSent = await this.sendWhatsApp(patientPhone, message);
+
+    // Send via Email if available
+    let emailSent = false;
+    if (patientEmail) {
+      emailSent = await this.sendEmail(patientEmail, `⚠️ Pemberitahuan Penting: Dokter Cuti - RSI Hospital`, message);
+    }
+
+    // Log the notification
+    await this.prisma.notification.create({
+      data: {
+        type: 'DOCTOR_LEAVE_NOTICE',
+        recipient: patientName,
+        recipientContact: `${this.formatPhoneNumber(patientPhone)}${patientEmail ? ` / ${patientEmail}` : ''}`,
+        message: `Doctor leave notice for ${doctorName} to ${patientName}`,
+        status: (whatsappSent || emailSent) ? 'sent' : 'failed',
+        ...(appointmentId && { appointmentId })
+      }
+    });
+
+    this.logger.log(`Doctor leave notice process completed for ${patientName}. WA: ${whatsappSent}, Email: ${emailSent}`);
+    return { whatsapp: whatsappSent, email: emailSent };
   }
 
   async sendReminder(payload: NotificationPayload, appointmentId?: string): Promise<void> {
@@ -318,6 +411,39 @@ Ini adalah pengingat untuk jadwal pemeriksaan Anda *besok*.
 • Bawa kartu BPJS (jika peserta)
 
 Sampai jumpa! 👋
+
+_Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
+  }
+
+  private generateDoctorLeaveMessage(payload: {
+    patientName: string;
+    doctorName: string;
+    appointmentDate: string;
+    appointmentTime: string;
+    bookingCode: string;
+  }): string {
+    const { patientName, doctorName, appointmentDate, appointmentTime, bookingCode } = payload;
+    return `🏥 *RSI Hospital*
+━━━━━━━━━━━━━━━━━
+📢 *PEMBERITAHUAN DOKTER CUTI*
+━━━━━━━━━━━━━━━━━
+
+Halo *${patientName}*,
+
+Kami menginformasikan bahwa *${doctorName}* saat ini sedang berhalangan/cuti.
+
+📋 *Detail Jadwal Terdampak*
+• Kode Booking: *${bookingCode}*
+• Tanggal: *${appointmentDate}*
+• Jam: *${appointmentTime}*
+
+⚠️ *Tindakan Selanjutnya*
+Jadwal pemeriksaan Anda kemungkinan akan mengalami perubahan. Tim kami akan segera menghubungi Anda, atau Anda dapat:
+1. Menghubungi pendaftaran via WhatsApp/Telepon.
+2. Melakukan perubahan jadwal (reschedule) via dashboard riwayat booking.
+3. Melakukan booking dengan dokter lain di poli yang sama.
+
+Mohon maaf atas ketidaknyamanan ini. Terima kasih atas pengertiannya. 🙏
 
 _Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
   }

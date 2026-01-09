@@ -1,16 +1,15 @@
-import { IsBoolean, IsEnum, IsNumber, IsOptional, Max, Min } from "class-validator";
-import { Transform } from "class-transformer";
+import { IsBoolean, IsOptional, IsEnum, IsInt } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export enum DoctorSortBy {
-    RECOMMENDED = 'recommended',
+    RECOMMENDED = "recommended",
 }
+
 export class GetDoctorsDto {
     @IsOptional()
-    @IsNumber()
-    @Transform(({ value }) => Number(value))
-    @Min(1)
-    @Max(1000)
-    limit?: number;
+    @IsInt()
+    @Transform(({ value }) => parseInt(value))
+    limit?: number = 10;
 
     @IsOptional()
     @IsEnum(DoctorSortBy)
@@ -24,4 +23,22 @@ export class GetDoctorsDto {
         return value;
     })
     isExecutive?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    @Transform(({ value }) => {
+        if (value === 'true' || value === true) return true;
+        if (value === 'false' || value === false) return false;
+        return value;
+    })
+    showAll?: boolean;
+
+    @IsOptional()
+    @IsBoolean()
+    @Transform(({ value }) => {
+        if (value === 'true' || value === true) return true;
+        if (value === 'false' || value === false) return false;
+        return value;
+    })
+    includeInactive?: boolean;
 }

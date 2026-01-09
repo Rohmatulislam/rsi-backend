@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { CreateDoctorDto } from './dto/create-doctor.dto';
 import { UpdateDoctorDto } from './dto/update-doctor.dto';
 import { PrismaService } from 'src/infra/database/prisma.service';
@@ -6,13 +6,20 @@ import { DoctorSortBy, GetDoctorsDto } from './dto/get-doctors.dto';
 
 import { KhanzaService } from 'src/infra/database/khanza.service';
 import { FileUploadService } from './services/file-upload.service';
+import { NotificationService } from '../notification/notification.service';
+
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class DoctorService {
+  private isSyncing = false;
+  private logger = new Logger(DoctorService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly khanzaService: KhanzaService,
     private readonly fileUploadService: FileUploadService,
+    private readonly notificationService: NotificationService,
   ) { }
 
   async create(createDoctorDto: CreateDoctorDto) {
@@ -63,122 +70,164 @@ export class DoctorService {
     return await this.khanzaService.getConnectionStatus();
   }
 
+  @Cron(CronExpression.EVERY_HOUR)
+  async handleAutomaticSync() {
+    this.logger.log('⏰ [AUTO_SYNC] Starting scheduled doctor sync...');
+    try {
+      await this.performSync();
+      this.logger.log('✅ [AUTO_SYNC] Scheduled doctor sync completed');
+    } catch (error) {
+      this.logger.error('❌ [AUTO_SYNC] Scheduled doctor sync failed:', error.message);
+    }
+  }
+
   async syncDoctors() {
-    let kDoctors = [];
-    let kSchedules = [];
-    let kPolis = [];
-    let kSpesialis = [];
+    if (this.isSyncing) {
+      return { message: 'Synchronization is already in progress', status: 'progress' };
+    }
+
+    // Kick off sync in background
+    this.performSync().catch(err => {
+      this.logger.error('❌ [SYNC_DOCTORS_BG] Background sync failed:', err.message);
+    });
+
+    return {
+      message: 'Synchronization started in background. This may take a few minutes.',
+      status: 'started'
+    };
+  }
+
+  private async performSync() {
+    if (this.isSyncing) return;
+    this.isSyncing = true;
 
     try {
-      kDoctors = await this.khanzaService.getDoctors();
-      kSchedules = await this.khanzaService.getDoctorSchedules();
-      kPolis = await this.khanzaService.getPoliklinik();
-      kSpesialis = await this.khanzaService.getSpesialis();
-    } catch (error) {
-      console.error('❌ [SYNC_DOCTORS] Error fetching from Khanza:', error.message);
-      throw new Error(`Gagal mengambil data dari SIMRS: ${error.message}`);
-    }
+      let kDoctors = [];
+      let kSchedules = [];
+      let kPolis = [];
+      let kSpesialis = [];
 
-    let syncedCount = 0;
+      try {
+        kDoctors = await this.khanzaService.getDoctors();
+        kSchedules = await this.khanzaService.getDoctorSchedules();
+        kPolis = await this.khanzaService.getPoliklinik();
+        kSpesialis = await this.khanzaService.getSpesialis();
+      } catch (error) {
+        this.logger.error('❌ [PERFORM_SYNC] Error fetching from Khanza:', error.message);
+        throw error;
+      }
 
-    for (const doc of kDoctors) {
-      // 1. Map Data
-      const specialist = kSpesialis.find(s => s.kd_sps === doc.kd_sps);
-      const specializationName = specialist ? specialist.nm_sps : 'Umum';
+      this.logger.log(`⚙️ [PERFORM_SYNC] Syncing ${kDoctors.length} doctors...`);
 
-      // Slug generation
-      const slug = doc.nm_dokter.toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/(^-|-$)/g, '');
+      // Cache categories and doctors to avoid constant DB calls
+      const [existingCategories, existingDoctors] = await Promise.all([
+        this.prisma.category.findMany({ where: { type: 'POLI' } }),
+        this.prisma.doctor.findMany()
+      ]);
 
-      // 2. Upsert Doctor
-      // Email is unique, so we might need a fake email if not provided in Khanza
-      // Or check if doctor already exists by kd_dokter
-      const existing = await this.prisma.doctor.findFirst({
-        where: { kd_dokter: doc.kd_dokter }
-      });
+      const categoryCache = new Map(existingCategories.map(c => [c.slug, c.id]));
+      const doctorMap = new Map(existingDoctors.filter(d => d.kd_dokter).map(d => [d.kd_dokter, d]));
 
-      const doctorData = {
-        name: doc.nm_dokter,
-        kd_dokter: doc.kd_dokter,
-        phone: doc.no_telp,
-        specialization: specializationName,
-        slug: existing ? existing.slug : slug + '-' + Math.floor(Math.random() * 1000), // Avoid collision
-        email: existing ? existing.email : `dr.${doc.kd_dokter.toLowerCase()}@rsi.id`, // Dummy email
-        licenseNumber: existing ? existing.licenseNumber : `SIP-${doc.kd_dokter}`, // Dummy SIP
-        isActive: true,
-        imageUrl: existing ? existing.imageUrl : null // Gunakan imageUrl dari dokter existing jika ada
-      };
+      let syncedCount = 0;
 
-      const savedDoctor = await this.prisma.doctor.upsert({
-        where: { kd_dokter: doc.kd_dokter },
-        update: {
-          name: doc.nm_dokter,
-          specialization: specializationName,
-          phone: doc.no_telp
-        },
-        create: doctorData
-      });
+      for (const doc of kDoctors) {
+        try {
+          const specialist = kSpesialis.find(s => s.kd_sps === doc.kd_sps);
+          const specializationName = specialist ? specialist.nm_sps : 'Umum';
+          const existing = doctorMap.get(doc.kd_dokter);
 
-      // 3. Upsert Schedules
-      const docSchedules = kSchedules.filter(s => s.kd_dokter === doc.kd_dokter);
+          const slug = doc.nm_dokter.toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
 
-      // Clear existing schedules? Or Update?
-      // Simpler: Delete all schedules for this doctor and re-insert
-      await this.prisma.schedule.deleteMany({ where: { doctorId: savedDoctor.id } });
+          const doctorData = {
+            name: doc.nm_dokter,
+            kd_dokter: doc.kd_dokter,
+            phone: doc.no_telp,
+            specialization: specializationName,
+            slug: existing ? existing.slug : `${slug}-${Math.floor(Math.random() * 1000)}`,
+            email: existing ? existing.email : `dr.${doc.kd_dokter.toLowerCase()}@rsi.id`,
+            licenseNumber: existing ? existing.licenseNumber : `SIP-${doc.kd_dokter}`,
+            isActive: true,
+            imageUrl: existing ? existing.imageUrl : null
+          };
 
-      for (const sched of docSchedules) {
-        // Convert Hari (SENIN, SELASA..) to Int (1, 2..)
-        const daysMap: { [key: string]: number } = {
-          'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6,
-          'AKHAD': 0
-        };
-        const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
-
-        if (dayInt >= 0) {
-          await this.prisma.schedule.create({
-            data: {
-              doctorId: savedDoctor.id,
-              dayOfWeek: dayInt,
-              startTime: sched.jam_mulai, // Validation? 
-              endTime: sched.jam_selesai,
-            }
+          const savedDoctor = await this.prisma.doctor.upsert({
+            where: { kd_dokter: doc.kd_dokter },
+            update: {
+              name: doc.nm_dokter,
+              specialization: specializationName,
+              phone: doc.no_telp
+            },
+            create: doctorData
           });
 
-          // 4. Link to Category (Poli)
-          const poli = kPolis.find(p => p.kd_poli === sched.kd_poli);
-          if (poli) {
-            // Check if category exists
-            const poliSlug = poli.nm_poli.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-            const category = await this.prisma.category.upsert({
-              where: { slug: poliSlug },
-              update: {},
-              create: {
-                name: poli.nm_poli,
-                slug: poliSlug,
-                type: 'POLI'
-              }
-            });
+          // Update cache for next iteration if needed (though unlikely to have duplicates in kDoctors)
+          doctorMap.set(doc.kd_dokter, savedDoctor as any);
 
-            // Connect Doctor to Category
-            // Need to check if already connected
-            const isConnected = await this.prisma.doctor.findFirst({
-              where: { id: savedDoctor.id, categories: { some: { id: category.id } } }
-            });
+          // 3. Upsert Schedules
+          const docSchedules = kSchedules.filter(s => s.kd_dokter === doc.kd_dokter);
+          await this.prisma.schedule.deleteMany({ where: { doctorId: savedDoctor.id } });
 
-            if (!isConnected) {
-              await this.prisma.doctor.update({
-                where: { id: savedDoctor.id },
-                data: { categories: { connect: { id: category.id } } }
+          const schedulesToCreate = [];
+          for (const sched of docSchedules) {
+            const daysMap: { [key: string]: number } = {
+              'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
+            };
+            const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
+
+            if (dayInt >= 0) {
+              schedulesToCreate.push({
+                doctorId: savedDoctor.id,
+                dayOfWeek: dayInt,
+                startTime: sched.jam_mulai,
+                endTime: sched.jam_selesai,
               });
+
+              // 4. Link to Category (Poli)
+              const poli = kPolis.find(p => p.kd_poli === sched.kd_poli);
+              if (poli) {
+                const poliSlug = poli.nm_poli.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                let categoryId = categoryCache.get(poliSlug);
+
+                if (!categoryId) {
+                  const category = await this.prisma.category.upsert({
+                    where: { slug: poliSlug },
+                    update: {},
+                    create: { name: poli.nm_poli, slug: poliSlug, type: 'POLI' }
+                  });
+                  categoryId = category.id;
+                  categoryCache.set(poliSlug, categoryId);
+                }
+
+                // Connect if not already
+                const isConnected = await this.prisma.doctor.findFirst({
+                  where: { id: savedDoctor.id, categories: { some: { id: categoryId } } }
+                });
+
+                if (!isConnected) {
+                  await this.prisma.doctor.update({
+                    where: { id: savedDoctor.id },
+                    data: { categories: { connect: { id: categoryId } } }
+                  });
+                }
+              }
             }
           }
+
+          if (schedulesToCreate.length > 0) {
+            await this.prisma.schedule.createMany({ data: schedulesToCreate });
+          }
+
+          syncedCount++;
+        } catch (doctorError) {
+          this.logger.warn(`⚠️ [PERFORM_SYNC] Failed for ${doc.kd_dokter}: ${doctorError.message}`);
         }
       }
-      syncedCount++;
+      this.logger.log(`✅ [PERFORM_SYNC] Successfully synced ${syncedCount} doctors`);
+    } finally {
+      this.isSyncing = false;
     }
-
-    return { message: `Synced ${syncedCount} doctors` };
   }
 
   async findAll(getDoctorsDto: GetDoctorsDto) {
@@ -193,13 +242,15 @@ export class DoctorService {
       kDoctors = await this.khanzaService.getDoctors();
       kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
 
-      // Filter doctors that have schedules
-      const doctorsWithSchedules = kDoctors.filter(kDoctor =>
-        kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
-      );
+      if (!getDoctorsDto.showAll) {
+        // Filter doctors that have schedules
+        const doctorsWithSchedules = kDoctors.filter(kDoctor =>
+          kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
+        );
 
-      // Get corresponding doctor records from local database
-      kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+        // Get corresponding doctor records from local database
+        kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+      }
     } catch (error) {
       console.error('❌ [FIND_ALL] Error fetching from Khanza:', error.message);
       // If Khanza is unreachable, we will show all doctors from local DB
@@ -210,8 +261,12 @@ export class DoctorService {
       where.kd_dokter = { in: kDoctorCodes };
     }
 
+    // Default to only showing active doctors unless requested otherwise
+    if (!getDoctorsDto.includeInactive) {
+      where.isActive = true;
+    }
+
     const isExecParam = getDoctorsDto.isExecutive;
-    // Only filter if explicitly true
     if (isExecParam === true || String(isExecParam) === 'true') {
       where.is_executive = true;
     }
@@ -246,6 +301,8 @@ export class DoctorService {
             kd_dokter: true,
             description: true,
             isActive: true,
+            ...({ isStudying: true } as any),
+            ...({ isOnLeave: true } as any),
             schedules: {
               select: {
                 id: true,
@@ -265,7 +322,7 @@ export class DoctorService {
         });
 
         // Enhance doctors with schedule information from Khanza including poli info
-        const enhancedDoctors = doctors.map(doctor => {
+        const enhancedDoctors = doctors.map((doctor: any) => {
           const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
           return {
             ...doctor,
@@ -280,6 +337,7 @@ export class DoctorService {
           };
         });
 
+        console.log('📋 [FIND_ALL] Returning names:', enhancedDoctors.map((d: any) => d.name).join(', '));
         return enhancedDoctors;
     }
   }
@@ -306,7 +364,8 @@ export class DoctorService {
 
     const doctors = await this.prisma.doctor.findMany({
       where: {
-        kd_dokter: { in: kDoctorCodes }
+        kd_dokter: { in: kDoctorCodes },
+        isActive: true
       },
       take: limit,
       select: {
@@ -331,6 +390,8 @@ export class DoctorService {
         kd_dokter: true,
         description: true,
         isActive: true,
+        ...({ isStudying: true } as any),
+        ...({ isOnLeave: true } as any),
         schedules: {
           select: {
             dayOfWeek: true,
@@ -387,6 +448,7 @@ export class DoctorService {
     if (kDoctorCodes.length > 0) {
       where.kd_dokter = { in: kDoctorCodes };
     }
+    where.isActive = true;
 
     const doctors = await this.prisma.doctor.findMany({
       where,
@@ -413,6 +475,8 @@ export class DoctorService {
         kd_dokter: true,
         description: true,
         isActive: true,
+        ...({ isStudying: true } as any),
+        ...({ isOnLeave: true } as any),
         schedules: {
           select: {
             dayOfWeek: true,
@@ -475,6 +539,8 @@ export class DoctorService {
         kd_dokter: true,
         description: true,
         isActive: true,
+        ...({ isStudying: true } as any),
+        ...({ isOnLeave: true } as any),
         schedules: {
           select: {
             id: true,
@@ -496,7 +562,7 @@ export class DoctorService {
     if (doctor && doctor.kd_dokter) {
       try {
         // Get schedule details from Khanza including poli information
-        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
+        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter as any);
 
         if (kSchedules && kSchedules.length > 0) {
           const scheduleDetails = kSchedules.map(schedule => ({
@@ -544,10 +610,90 @@ export class DoctorService {
       dataToUpdate.imageUrl = updated.imageUrl;
     }
 
-    return await this.prisma.doctor.update({
+    // Check for status change to isOnLeave
+    const currentDoctor = await this.prisma.doctor.findUnique({
+      where: { id },
+      select: { isOnLeave: true, name: true }
+    });
+
+    const isNewlyOnLeave = updateDoctorDto.isOnLeave === true && currentDoctor?.isOnLeave !== true;
+
+    const result = await this.prisma.doctor.update({
       where: { id },
       data: dataToUpdate,
     });
+
+    if (isNewlyOnLeave) {
+      this.handleDoctorLeaveNotifications(id, currentDoctor.name).catch(err => {
+        this.logger.error(`❌ Failed to send leave notifications for doctor ${id}: ${err.message}`);
+      });
+    }
+
+    return result;
+  }
+
+  private async handleDoctorLeaveNotifications(doctorId: string, doctorName: string) {
+    this.logger.log(`📢 [LEAVE_NOTICE] Start sending notifications for doctor: ${doctorName}`);
+
+    // Get today at 00:00:00
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const affectedAppointments = await this.prisma.appointment.findMany({
+      where: {
+        doctorId: doctorId,
+        status: 'scheduled',
+        appointmentDate: {
+          gte: today
+        }
+      },
+      orderBy: {
+        appointmentDate: 'asc'
+      }
+    });
+
+    this.logger.log(`📢 [LEAVE_NOTICE] Found ${affectedAppointments.length} affected appointments`);
+
+    for (const appt of affectedAppointments) {
+      if (appt.patientPhone) {
+        try {
+          const dateStr = appt.appointmentDate.toLocaleDateString('id-ID', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+          });
+
+          // Getting time part safely if available, otherwise just use a default or empty
+          const timeStr = appt.appointmentDate.toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }) || '--:--';
+
+          const results = await this.notificationService.sendDoctorLeaveNotification({
+            patientName: appt.patientName || 'Pasien',
+            patientPhone: appt.patientPhone,
+            patientEmail: appt.patientEmail,
+            doctorName: doctorName,
+            appointmentDate: dateStr,
+            appointmentTime: timeStr,
+            bookingCode: appt.id.substring(appt.id.length - 6).toUpperCase()
+          }, appt.id);
+
+          if (results.whatsapp && results.email) {
+            this.logger.log(`✅ [LEAVE_NOTICE] Notifications sent to ${appt.patientName} via WA and Email`);
+          } else if (results.whatsapp) {
+            this.logger.log(`✅ [LEAVE_NOTICE] Notification sent to ${appt.patientName} via WA only`);
+          } else if (results.email) {
+            this.logger.log(`✅ [LEAVE_NOTICE] Notification sent to ${appt.patientName} via Email only (WA failed)`);
+          } else {
+            this.logger.error(`❌ [LEAVE_NOTICE] All notifications failed for ${appt.patientName}`);
+          }
+        } catch (error) {
+          this.logger.error(`❌ [LEAVE_NOTICE] Failed to notify ${appt.patientName}: ${error.message}`);
+        }
+      }
+    }
   }
 
   async remove(id: string) {
@@ -602,6 +748,8 @@ export class DoctorService {
         kd_dokter: true,
         description: true,
         isActive: true,
+        ...({ isStudying: true } as any),
+        ...({ isOnLeave: true } as any),
         schedules: {
           select: {
             id: true,
@@ -623,7 +771,7 @@ export class DoctorService {
     if (doctor && doctor.kd_dokter) {
       try {
         // Get schedule details from Khanza including poli information
-        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter);
+        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter as any);
 
         if (kSchedules && kSchedules.length > 0) {
           const scheduleDetails = kSchedules.map(schedule => ({
@@ -670,6 +818,8 @@ export class DoctorService {
           kd_dokter: true,
           description: true,
           isActive: true,
+          ...({ isStudying: true } as any),
+          ...({ isOnLeave: true } as any),
           schedules: {
             select: {
               id: true,
@@ -691,7 +841,7 @@ export class DoctorService {
       if (idBasedDoctor && idBasedDoctor.kd_dokter) {
         try {
           // Get schedule details from Khanza including poli information
-          const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(idBasedDoctor.kd_dokter);
+          const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(idBasedDoctor.kd_dokter as any);
 
           if (kSchedules && kSchedules.length > 0) {
             const scheduleDetails = kSchedules.map(schedule => ({
