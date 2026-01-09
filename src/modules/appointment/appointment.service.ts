@@ -526,6 +526,49 @@ export class AppointmentService {
   }
 
   /**
+   * Search patient by NIK (No. KTP) from Khanza
+   * Returns patient details if found
+   */
+  async searchPatientByNIK(nik: string) {
+    this.logger.log(`🔍 [SEARCH] Searching patient by NIK: ${nik}`);
+
+    try {
+      // Search patient in Khanza database
+      this.logger.log(`🔍 [SEARCH] Calling khanzaService.findPatientByNIK(${nik})`);
+      const patient = await this.khanzaService.findPatientByNIK(nik);
+
+      if (!patient) {
+        this.logger.warn(`⚠️ [SEARCH] Patient not found for NIK: ${nik}`);
+        return {
+          found: false,
+          message: 'Pasien tidak ditemukan'
+        };
+      }
+
+      this.logger.log(`✅ [SEARCH] Patient found: ${patient.nm_pasien} (NIK: ${patient.no_ktp})`);
+
+      // Return patient details
+      return {
+        found: true,
+        patient: {
+          no_rkm_medis: patient.no_rkm_medis,
+          no_ktp: patient.no_ktp, // NIK
+          nm_pasien: patient.nm_pasien,
+          jk: patient.jk,
+          tgl_lahir: patient.tgl_lahir,
+          no_tlp: patient.no_tlp,
+          alamat: patient.alamat,
+          email: patient.email,
+          no_peserta: patient.no_peserta || '', // No. BPJS
+        }
+      };
+    } catch (error) {
+      this.logger.error(`❌ [SEARCH] Error searching patient by NIK: ${error.message}`);
+      throw new BadRequestException('Gagal mencari data pasien melalui NIK');
+    }
+  }
+
+  /**
    * Get all appointments created by a specific user
    * Returns list of patients registered by this user
    */

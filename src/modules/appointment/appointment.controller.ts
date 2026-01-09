@@ -48,6 +48,12 @@ export class AppointmentController {
     return this.appointmentService.searchPatientByRM(mrNumber);
   }
 
+  @Get('search-patient-nik/:nik')
+  @AllowAnonymous() // Allow public search for booking
+  searchPatientByNIK(@Param('nik') nik: string) {
+    return this.appointmentService.searchPatientByNIK(nik);
+  }
+
   @Get('my-patients/:userId')
   @AllowAnonymous() // Allow public access for now during development
   getByUserId(@Param('userId') userId: string) {
