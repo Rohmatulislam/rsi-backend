@@ -28,7 +28,8 @@ export class DokterService {
         'jadwal.jam_mulai',
         'jadwal.jam_selesai',
         'jadwal.kuota',
-        'poliklinik.nm_poli'
+        'poliklinik.nm_poli',
+        'poliklinik.registrasi'
       )
       .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli');
   }
@@ -43,7 +44,8 @@ export class DokterService {
         'jadwal.jam_mulai',
         'jadwal.jam_selesai',
         'jadwal.kuota',
-        'poliklinik.nm_poli'
+        'poliklinik.nm_poli',
+        'poliklinik.registrasi'
       )
       .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli')
       .where('jadwal.kd_dokter', doctorCode);

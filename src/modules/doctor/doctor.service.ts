@@ -333,6 +333,7 @@ export class DoctorService {
               jam_mulai: schedule.jam_mulai,
               jam_selesai: schedule.jam_selesai,
               kuota: schedule.kuota,
+              consultation_fee: schedule.registrasi || 0,
             }))
           };
         });
@@ -422,6 +423,7 @@ export class DoctorService {
           jam_mulai: schedule.jam_mulai,
           jam_selesai: schedule.jam_selesai,
           kuota: schedule.kuota,
+          consultation_fee: schedule.registrasi || 0,
         }))
       };
     });
@@ -507,6 +509,7 @@ export class DoctorService {
           jam_mulai: schedule.jam_mulai,
           jam_selesai: schedule.jam_selesai,
           kuota: schedule.kuota,
+          consultation_fee: schedule.registrasi || 0,
         }))
       };
     });
@@ -572,6 +575,7 @@ export class DoctorService {
             jam_mulai: schedule.jam_mulai,
             jam_selesai: schedule.jam_selesai,
             kuota: schedule.kuota,
+            consultation_fee: schedule.registrasi || 0,
           }));
 
           return {
@@ -781,6 +785,7 @@ export class DoctorService {
             jam_mulai: schedule.jam_mulai,
             jam_selesai: schedule.jam_selesai,
             kuota: schedule.kuota,
+            consultation_fee: schedule.registrasi || 0,
           }));
 
           return {
@@ -851,6 +856,7 @@ export class DoctorService {
               jam_mulai: schedule.jam_mulai,
               jam_selesai: schedule.jam_selesai,
               kuota: schedule.kuota,
+              consultation_fee: schedule.registrasi || 0,
             }));
 
             return {

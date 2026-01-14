@@ -8,7 +8,7 @@ export class PoliklinikService {
   constructor(private readonly dbService: KhanzaDBService) { }
 
   async getPoliklinik() {
-    return this.dbService.db('poliklinik').select('kd_poli', 'nm_poli');
+    return this.dbService.db('poliklinik').select('kd_poli', 'nm_poli', 'registrasi');
   }
 
   async getPoliklinikWithActiveSchedules() {
