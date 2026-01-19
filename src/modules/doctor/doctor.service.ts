@@ -81,6 +81,98 @@ export class DoctorService {
     }
   }
 
+  /**
+   * Match existing doctors in local DB with Khanza doctors by name
+   * and update their kd_dokter field automatically
+   */
+  async matchDoctorCodes() {
+    this.logger.log('🔗 [MATCH_CODES] Starting automatic kd_dokter matching...');
+
+    try {
+      // Get doctors from Khanza
+      const kDoctors = await this.khanzaService.getDoctors();
+
+      // Get local doctors without kd_dokter
+      const localDoctors = await this.prisma.doctor.findMany({
+        where: { kd_dokter: null }
+      });
+
+      if (localDoctors.length === 0) {
+        return { message: 'All doctors already have kd_dokter', matched: 0 };
+      }
+
+      this.logger.log(`📋 [MATCH_CODES] Found ${localDoctors.length} doctors without kd_dokter`);
+
+      let matchedCount = 0;
+      const matchResults: { localName: string; khanzaName: string; kd_dokter: string }[] = [];
+
+      for (const localDoc of localDoctors) {
+        // Normalize local doctor name for comparison
+        const localName = localDoc.name.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+
+        // Find best match in Khanza doctors
+        let bestMatch = null;
+        let bestScore = 0;
+
+        for (const kDoc of kDoctors) {
+          const khanzaName = kDoc.nm_dokter.toLowerCase().replace(/[^a-z\s]/g, '').trim();
+
+          // Simple similarity: check if names contain each other or are equal
+          let score = 0;
+          if (localName === khanzaName) {
+            score = 100;
+          } else if (localName.includes(khanzaName) || khanzaName.includes(localName)) {
+            score = 80;
+          } else {
+            // Check word overlap
+            const localWords = localName.split(' ');
+            const khanzaWords = khanzaName.split(' ');
+            const commonWords = localWords.filter(w => khanzaWords.includes(w));
+            score = (commonWords.length / Math.max(localWords.length, khanzaWords.length)) * 70;
+          }
+
+          if (score > bestScore && score >= 50) {
+            bestScore = score;
+            bestMatch = kDoc;
+          }
+        }
+
+        if (bestMatch) {
+          // Check if this kd_dokter is not already assigned to another doctor
+          const existingWithCode = await this.prisma.doctor.findFirst({
+            where: { kd_dokter: bestMatch.kd_dokter }
+          });
+
+          if (!existingWithCode) {
+            await this.prisma.doctor.update({
+              where: { id: localDoc.id },
+              data: { kd_dokter: bestMatch.kd_dokter }
+            });
+            matchedCount++;
+            matchResults.push({
+              localName: localDoc.name,
+              khanzaName: bestMatch.nm_dokter,
+              kd_dokter: bestMatch.kd_dokter
+            });
+            this.logger.log(`✅ Matched: "${localDoc.name}" → "${bestMatch.nm_dokter}" (${bestMatch.kd_dokter})`);
+          }
+        }
+      }
+
+      this.logger.log(`🎯 [MATCH_CODES] Matched ${matchedCount} out of ${localDoctors.length} doctors`);
+
+      return {
+        message: `Successfully matched ${matchedCount} doctors with Khanza codes`,
+        matched: matchedCount,
+        total: localDoctors.length,
+        results: matchResults
+      };
+    } catch (error) {
+      this.logger.error('❌ [MATCH_CODES] Error:', error.message);
+      throw error;
+    }
+  }
+
   async syncDoctors() {
     if (this.isSyncing) {
       return { message: 'Synchronization is already in progress', status: 'progress' };

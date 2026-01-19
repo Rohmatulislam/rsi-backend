@@ -59,6 +59,12 @@ export class DoctorController {
     return this.doctorService.syncDoctors();
   }
 
+  @Post('match-codes')
+  @AllowAnonymous() // Auto-match local doctors with Khanza codes
+  matchCodes() {
+    return this.doctorService.matchDoctorCodes();
+  }
+
   @Get('health/khanza')
   @AllowAnonymous() // For diagnostic purposes
   health() {
