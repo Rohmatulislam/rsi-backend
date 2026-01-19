@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { RadiologiService } from './radiologi.service';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 
 @Controller('radiologi')
 export class RadiologiController {

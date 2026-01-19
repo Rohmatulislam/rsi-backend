@@ -3,7 +3,7 @@ import { ServiceService } from './service.service';
 import { CreateServiceDto } from './dto/create-service.dto';
 import { CreateServiceItemDto } from './dto/create-service-item.dto';
 import { UpdateServiceDto, UpdateServiceItemDto } from './dto/update-service.dto';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 import { UseGuards } from '@nestjs/common';
 import { AdminGuard } from '../auth/guards/admin.guard';
 

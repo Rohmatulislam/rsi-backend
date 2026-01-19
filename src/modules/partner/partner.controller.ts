@@ -11,7 +11,7 @@ import {
 import { PartnerService } from './partner.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
 import { UpdatePartnerDto } from './dto/update-partner.dto';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('partners')

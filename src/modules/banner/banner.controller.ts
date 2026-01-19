@@ -11,7 +11,7 @@ import {
 import { BannerService } from './banner.service';
 import { CreateBannerDto } from './dto/create-banner.dto';
 import { UpdateBannerDto } from './dto/update-banner.dto';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('banners')

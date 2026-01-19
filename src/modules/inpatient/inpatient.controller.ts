@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Patch, Param, Body, Logger, Delete } from '@nestjs/common';
 import { InpatientService } from './inpatient.service';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 
 @Controller('inpatient')
 export class InpatientController {

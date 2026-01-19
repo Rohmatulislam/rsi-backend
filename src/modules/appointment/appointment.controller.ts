@@ -2,7 +2,7 @@ import { Controller, Post, Body, Delete, Get, Param, ParseUUIDPipe, Patch } from
 import { AppointmentService } from './appointment.service';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 
 @Controller('appointments')
 export class AppointmentController {

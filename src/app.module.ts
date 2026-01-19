@@ -11,8 +11,9 @@ import { ReminderModule } from './modules/reminder/reminder.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AuthModule as AppAuthModule } from './modules/auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
-import { AuthModule } from '@thallesp/nestjs-better-auth';
-import { auth } from './infra/auth/auth';
+// Temporarily disabled due to ESM incompatibility with Vercel
+// import { AuthModule } from '@thallesp/nestjs-better-auth';
+// import { auth } from './infra/auth/auth';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ArticleModule } from './modules/article/articles.module';
 import { AboutModule } from './modules/about/about.module';
@@ -39,9 +40,10 @@ import { PartnerModule } from './modules/partner/partner.module';
     }),
     ScheduleModule.forRoot(),
     SupabaseModule,
-    AuthModule.forRoot({
-      auth: auth,
-    }),
+    // Temporarily disabled due to ESM incompatibility with Vercel
+    // AuthModule.forRoot({
+    //   auth: auth,
+    // }),
     DoctorModule,
     DatabaseModule,
     AppointmentModule,

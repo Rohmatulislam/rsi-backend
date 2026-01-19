@@ -1,6 +1,6 @@
 import { Controller, Get, Post } from '@nestjs/common';
 import { StatsService } from './stats.service';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth';
+import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 
 @Controller('stats')
 export class StatsController {

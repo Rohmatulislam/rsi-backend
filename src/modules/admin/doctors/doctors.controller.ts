@@ -2,11 +2,11 @@ import { Controller, Get, Post, Put, Delete, Body, Param, Query } from '@nestjs/
 import { DoctorService } from '../../doctor/doctor.service';
 import { CreateDoctorDto } from '../../doctor/dto/create-doctor.dto';
 import { UpdateDoctorDto } from '../../doctor/dto/update-doctor.dto';
-import { AllowAnonymous } from '@thallesp/nestjs-better-auth'; // In production, this should be protected
+import { AllowAnonymous } from '../../../infra/auth/allow-anonymous.decorator'; // In production, this should be protected
 
 @Controller('admin/doctors')
 export class DoctorsController {
-  constructor(private readonly doctorService: DoctorService) {}
+  constructor(private readonly doctorService: DoctorService) { }
 
   @Get()
   @AllowAnonymous()
