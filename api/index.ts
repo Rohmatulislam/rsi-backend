@@ -41,7 +41,7 @@ async function bootstrapServer() {
             ];
 
         app.enableCors({
-            origin: (origin, callback) => {
+            origin: (origin: any, callback: any) => {
                 if (!origin) return callback(null, true);
                 if (
                     allowedOrigins.indexOf(origin) !== -1 ||
