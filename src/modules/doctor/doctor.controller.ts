@@ -65,6 +65,12 @@ export class DoctorController {
     return this.doctorService.matchDoctorCodes();
   }
 
+  @Post('cleanup-duplicates')
+  @AllowAnonymous() // Remove doctors without kd_dokter
+  cleanupDuplicates() {
+    return this.doctorService.cleanupDuplicates();
+  }
+
   @Get('health/khanza')
   @AllowAnonymous() // For diagnostic purposes
   health() {

@@ -173,6 +173,49 @@ export class DoctorService {
     }
   }
 
+  /**
+   * Remove doctors without kd_dokter (duplicates from before Khanza sync)
+   * These are doctors that were manually added but don't link to SIMRS
+   */
+  async cleanupDuplicates() {
+    this.logger.log('🧹 [CLEANUP] Starting duplicate cleanup...');
+
+    try {
+      // Find doctors without kd_dokter
+      const doctorsWithoutCode = await this.prisma.doctor.findMany({
+        where: { kd_dokter: null },
+        select: { id: true, name: true }
+      });
+
+      if (doctorsWithoutCode.length === 0) {
+        return { message: 'No doctors without kd_dokter found', deleted: 0 };
+      }
+
+      this.logger.log(`🗑️ [CLEANUP] Found ${doctorsWithoutCode.length} doctors without kd_dokter`);
+
+      // Delete schedules first (foreign key constraint)
+      for (const doc of doctorsWithoutCode) {
+        await this.prisma.schedule.deleteMany({ where: { doctorId: doc.id } });
+      }
+
+      // Delete the doctors
+      const deleteResult = await this.prisma.doctor.deleteMany({
+        where: { kd_dokter: null }
+      });
+
+      this.logger.log(`✅ [CLEANUP] Deleted ${deleteResult.count} doctors without kd_dokter`);
+
+      return {
+        message: `Successfully deleted ${deleteResult.count} duplicate doctors`,
+        deleted: deleteResult.count,
+        deletedDoctors: doctorsWithoutCode.map(d => d.name)
+      };
+    } catch (error) {
+      this.logger.error('❌ [CLEANUP] Error:', error.message);
+      throw error;
+    }
+  }
+
   async syncDoctors() {
     if (this.isSyncing) {
       return { message: 'Synchronization is already in progress', status: 'progress' };
