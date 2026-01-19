@@ -285,7 +285,11 @@ export class NotificationService {
     // Send via Email if available
     let emailSent = false;
     if (patientEmail) {
-      emailSent = await this.sendEmail(patientEmail, `⚠️ Pemberitahuan Penting: Dokter Cuti - RSI Hospital`, message);
+      emailSent = await this.sendEmail({
+        to: patientEmail,
+        subject: `⚠️ Pemberitahuan Penting: Dokter Cuti - RSI Hospital`,
+        text: message,
+      });
     }
 
     // Log the notification
