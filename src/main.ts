@@ -16,10 +16,12 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  // Serve static files from uploads folder
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
-    prefix: '/uploads',
-  });
+  // Serve static files from uploads folder (Only in development or if needed)
+  if (process.env.NODE_ENV !== 'production') {
+    app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+      prefix: '/uploads',
+    });
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({
