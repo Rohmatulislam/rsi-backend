@@ -6,9 +6,9 @@ import { Pool } from 'pg';
 
 // Create pool once and reuse
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL,
 });
-  
+
 const adapter = new PrismaPg(pool);
 
 @Injectable()
