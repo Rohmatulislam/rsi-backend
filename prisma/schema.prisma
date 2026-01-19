@@ -88,20 +88,24 @@ model Schedule {
 }
 
 model User {
-  id            String         @id
-  name          String
-  email         String         @unique
-  emailVerified Boolean        @default(false)
-  image         String?
-  role          String         @default("PATIENT")
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  appointments  Appointment[]  @relation("UserAppointments")
-  accounts      Account[]
-  familyMembers FamilyMember[]
-  prescriptions Prescription[] @relation("UserPrescriptions")
-  sessions      Session[]
-  profile       UserProfile?
+  id                   String         @id @default(cuid())
+  name                 String
+  email                String         @unique
+  password             String?        // For JWT auth
+  phone                String?
+  emailVerified        Boolean        @default(false)
+  image                String?
+  role                 String         @default("patient")
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  appointments         Appointment[]  @relation("UserAppointments")
+  accounts             Account[]
+  familyMembers        FamilyMember[]
+  prescriptions        Prescription[] @relation("UserPrescriptions")
+  sessions             Session[]
+  profile              UserProfile?
 
   @@map("user")
 }

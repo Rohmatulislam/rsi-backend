@@ -109,8 +109,38 @@ export class NotificationService {
     }
   }
 
-  // Send Email
-  private async sendEmail(to: string, subject: string, message: string): Promise<boolean> {
+  // Send Email (public for use by AuthService)
+  async sendEmail(params: { to: string; subject: string; html?: string; text?: string }): Promise<boolean> {
+    const { to, subject, html, text } = params;
+    if (!to) return false;
+
+    try {
+      await this.transporter.sendMail({
+        from: this.emailFrom,
+        to,
+        subject,
+        text: text || (html ? html.replace(/<[^>]*>/g, '') : ''),
+        html: html || `
+          <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
+            <div style="background-color: #0b1e33; color: white; padding: 20px; text-align: center;">
+              <h1 style="margin: 0;">RSI Hospital</h1>
+            </div>
+            <div style="padding: 30px;">
+              ${text?.split('\n').map(line => line.trim() ? `<p style="margin: 10px 0;">${line}</p>` : '<br/>').join('')}
+            </div>
+          </div>
+        `,
+      });
+      this.logger.log(`✅ Email sent to ${to}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`❌ Email send error: ${error.message}`);
+      return false;
+    }
+  }
+
+  // Internal send email (for backward compatibility)
+  private async sendEmailInternal(to: string, subject: string, message: string): Promise<boolean> {
     if (!to) return false;
 
     try {
