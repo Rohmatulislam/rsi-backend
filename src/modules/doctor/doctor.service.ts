@@ -257,8 +257,17 @@ export class DoctorService {
     }
 
     const where: any = {};
-    if (kDoctorCodes.length > 0) {
-      where.kd_dokter = { in: kDoctorCodes };
+    // Only filter by kd_dokter if we have codes AND showAll is false
+    // Skip this filter if it would exclude all doctors (to support doctors without kd_dokter)
+    if (kDoctorCodes.length > 0 && !getDoctorsDto.showAll) {
+      // Check if we have any local doctors with these codes before filtering
+      const matchingDoctors = await this.prisma.doctor.count({
+        where: { kd_dokter: { in: kDoctorCodes } }
+      });
+      // Only apply filter if we have matching doctors, otherwise show all active doctors
+      if (matchingDoctors > 0) {
+        where.kd_dokter = { in: kDoctorCodes };
+      }
     }
 
     // Default to only showing active doctors unless requested otherwise
