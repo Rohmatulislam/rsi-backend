@@ -3,15 +3,7 @@ import { PrismaClient } from '@prisma/client';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
-  constructor() {
-    super({
-      datasources: {
-        db: {
-          url: process.env.DIRECT_URL || process.env.DATABASE_URL,
-        },
-      },
-    } as any);
-  }
+  // Prisma 7: Database URL is configured via prisma.config.ts, not here
 
   async onModuleInit() {
     await this.$connect();
@@ -21,3 +13,4 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     await this.$disconnect();
   }
 }
+
