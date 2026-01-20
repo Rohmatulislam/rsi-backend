@@ -33,6 +33,17 @@ export class AuthController {
     @Get('get-session')
     @AllowAnonymous()
     async getSession(@Request() req) {
+        return this.handleGetSession(req);
+    }
+
+    @Post('get-session')
+    @AllowAnonymous()
+    @HttpCode(HttpStatus.OK)
+    async getSessionPost(@Request() req) {
+        return this.handleGetSession(req);
+    }
+
+    private handleGetSession(req: any) {
         // Try to extract user from token if present
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
