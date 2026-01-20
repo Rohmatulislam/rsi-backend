@@ -127,4 +127,11 @@ export class AuthController {
     ) {
         return this.authService.resetPassword(token, password);
     }
+
+    @Post('verify-email')
+    @AllowAnonymous()
+    @HttpCode(HttpStatus.OK)
+    async verifyEmail(@Body('token') token: string) {
+        return this.authService.verifyEmail(token);
+    }
 }

@@ -90,11 +90,47 @@ export class AuthService {
 
     this.logger.log(`New user registered: ${email}`);
 
+    // Generate verification token (valid for 24 hours)
+    const verificationToken = this.jwtService.sign(
+      { sub: user.id, type: 'verify-email' },
+      { expiresIn: '24h' }
+    );
+
+    // Send verification email
+    try {
+      await this.notificationService.sendEmail({
+        to: user.email,
+        subject: 'Verifikasi Email - RSI Siti Hajar',
+        html: `
+          <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
+            <div style="background-color: #008080; color: white; padding: 20px; text-align: center;">
+              <h1 style="margin: 0;">RSI Siti Hajar Mataram</h1>
+            </div>
+            <div style="padding: 30px;">
+              <h2>Halo ${name},</h2>
+              <p>Terima kasih telah mendaftar di RSI Siti Hajar Mataram. Silakan verifikasi alamat email Anda dengan menekan tombol di bawah ini:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${process.env.FRONTEND_URL || 'https://rsisitihajarmataram.co.id'}/verify-email?token=${verificationToken}" 
+                   style="background-color: #008080; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                  Verifikasi Email Saya
+                </a>
+              </div>
+              <p>Link ini berlaku selama 24 jam.</p>
+              <p>Jika Anda tidak merasa mendaftar di layanan kami, silakan abaikan email ini.</p>
+            </div>
+          </div>
+        `,
+      });
+      this.logger.log(`Verification email sent to: ${email}`);
+    } catch (error) {
+      this.logger.error(`Failed to send verification email to ${email}: ${error.message}`);
+    }
+
     // Generate tokens
     const tokens = await this.generateTokens(user);
 
     return {
-      message: 'Registrasi berhasil',
+      message: 'Registrasi berhasil. Silakan cek email Anda untuk verifikasi.',
       user: {
         id: user.id,
         email: user.email,
@@ -288,5 +324,41 @@ export class AuthService {
     return await this.prisma.user.findUnique({
       where: { email },
     });
+  }
+  // Verify email with token
+  async verifyEmail(token: string) {
+    try {
+      const payload = this.jwtService.verify(token);
+
+      if (payload.type !== 'verify-email') {
+        throw new BadRequestException('Token tidak valid');
+      }
+
+      const user = await this.prisma.user.findUnique({
+        where: { id: payload.sub },
+      });
+
+      if (!user) {
+        throw new BadRequestException('User tidak ditemukan');
+      }
+
+      if (user.emailVerified) {
+        return { message: 'Email sudah terverifikasi' };
+      }
+
+      // Update user
+      await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          emailVerified: true,
+        },
+      });
+
+      this.logger.log(`Email verified for: ${user.email}`);
+
+      return { message: 'Email berhasil diverifikasi' };
+    } catch (error) {
+      throw new BadRequestException('Token tidak valid atau sudah kadaluarsa');
+    }
   }
 }
