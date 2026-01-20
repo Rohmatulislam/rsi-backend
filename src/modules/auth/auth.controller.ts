@@ -22,12 +22,45 @@ export class AuthController {
         return this.authService.register(registerDto);
     }
 
+    // Better-auth compatible endpoint for sign-up
+    @Post('sign-up/email')
+    @AllowAnonymous()
+    async signUpEmail(@Body() body: { email: string; password: string; name: string }) {
+        const result = await this.authService.register({
+            email: body.email,
+            password: body.password,
+            name: body.name,
+        });
+        // Return in better-auth format
+        return {
+            user: result.user,
+            token: result.accessToken,
+        };
+    }
+
     @Post('login')
     @AllowAnonymous()
     @UseGuards(AuthGuard('local'))
     @HttpCode(HttpStatus.OK)
     async login(@Request() req) {
         return this.authService.login(req.user);
+    }
+
+    // Better-auth compatible endpoint for sign-in
+    @Post('sign-in/email')
+    @AllowAnonymous()
+    @HttpCode(HttpStatus.OK)
+    async signInEmail(@Body() body: { email: string; password: string }) {
+        const user = await this.authService.validateUser(body.email, body.password);
+        if (!user) {
+            return { error: { code: 'INVALID_PASSWORD', message: 'Email atau password salah' } };
+        }
+        const result = await this.authService.login(user);
+        // Return in better-auth format
+        return {
+            user: result.user,
+            token: result.accessToken,
+        };
     }
 
     @Get('get-session')
