@@ -31,10 +31,9 @@ export class AuthController {
             password: body.password,
             name: body.name,
         });
-        // Return in better-auth format
+        // Return in better-auth format, token is omitted to force verification flow
         return {
             user: result.user,
-            token: result.accessToken,
         };
     }
 
@@ -55,6 +54,17 @@ export class AuthController {
         if (!user) {
             return { error: { code: 'INVALID_PASSWORD', message: 'Email atau password salah' } };
         }
+
+        // Check verification
+        if (!user.emailVerified) {
+            return {
+                error: {
+                    code: 'EMAIL_NOT_VERIFIED',
+                    message: 'Email belum diverifikasi. Silakan cek kotak masuk email Anda.',
+                },
+            };
+        }
+
         const result = await this.authService.login(user);
         // Return in better-auth format
         return {
