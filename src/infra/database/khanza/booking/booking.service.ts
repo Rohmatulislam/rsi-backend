@@ -289,6 +289,21 @@ export class BookingService {
       .select('*');
   }
 
+  async getBookingCountsByDate(date: string): Promise<{ kd_dokter: string, count: number }[]> {
+    // Count bookings grouped by doctor for efficient quota calculation
+    const counts = await this.dbService.db('reg_periksa')
+      .where('tgl_registrasi', date)
+      .andWhere('stts', '!=', 'Batal') // Exclude cancelled ones
+      .select('kd_dokter')
+      .count('no_rawat as count')
+      .groupBy('kd_dokter');
+
+    return counts.map(row => ({
+      kd_dokter: row.kd_dokter as string,
+      count: parseInt(row.count as string) || 0
+    }));
+  }
+
   async getNextNoRawat(date: string): Promise<string> {
     // Format date: YYYY/MM/DD
     const datePart = date.replace(/-/g, '/'); // Transform YYYY-MM-DD to YYYY/MM/DD if needed

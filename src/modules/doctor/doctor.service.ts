@@ -366,19 +366,34 @@ export class DoctorService {
   }
 
   async findAll(getDoctorsDto: GetDoctorsDto) {
-    console.log('🔍 [FIND_ALL] Input DTO:', JSON.stringify(getDoctorsDto));
+    // console.log('🔍 [FIND_ALL] Input DTO:', JSON.stringify(getDoctorsDto));
 
     let kDoctors = [];
     let kSchedules = [];
     let kDoctorCodes = [];
+    let todayCounts = new Map<string, number>();
 
     try {
       // Get all doctors from SIMRS Khanza
-      kDoctors = await this.khanzaService.getDoctors();
-      kSchedules = await this.khanzaService.getDoctorSchedulesWithPoliInfo();
+      const [doctors, schedules, counts] = await Promise.all([
+        this.khanzaService.getDoctors(),
+        this.khanzaService.getDoctorSchedulesWithPoliInfo(),
+        this.khanzaService.getBookingCountsByDate(new Date().toISOString().split('T')[0])
+      ]);
+
+      kDoctors = doctors;
+      kSchedules = schedules;
+
+      // Map counts for quick lookup
+      counts.forEach(c => todayCounts.set(c.kd_dokter, c.count));
+
+      // 1. FILTER BY POLI CODE IF PROVIDED
+      if (getDoctorsDto.poliCode) {
+        kSchedules = kSchedules.filter(s => s.kd_poli === getDoctorsDto.poliCode);
+      }
 
       if (!getDoctorsDto.showAll) {
-        // Filter doctors that have schedules
+        // Filter doctors that have schedules (or filtered schedules)
         const doctorsWithSchedules = kDoctors.filter(kDoctor =>
           kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
         );
@@ -402,7 +417,13 @@ export class DoctorService {
       // Only apply filter if we have matching doctors, otherwise show all active doctors
       if (matchingDoctors > 0) {
         where.kd_dokter = { in: kDoctorCodes };
+      } else if (getDoctorsDto.poliCode) {
+        // If filtering by Poli and no local doctors found, return empty (correct behavior)
+        return [];
       }
+    } else if (getDoctorsDto.poliCode && kDoctorCodes.length === 0) {
+      // Poli filter requested but no schedules/doctors found
+      return [];
     }
 
     // Default to only showing active doctors unless requested otherwise
@@ -465,24 +486,45 @@ export class DoctorService {
           },
         });
 
+        const todayDayInt = new Date().getDay() === 0 ? 0 : new Date().getDay(); // 0-6 (Sun-Sat) or Khanza might use differnt map
+        // Khanza Jadwal often uses HARI_KERJA enum like 'SENIN', 'SELASA'.
+        // Mapping: SENIN=1, SELASA=2, RABU=3, KAMIS=4, JUMAT=5, SABTU=6, AKHAD/MINGGU=0
+        const daysMap: { [key: string]: number } = {
+          'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
+        };
+
         // Enhance doctors with schedule information from Khanza including poli info
         const enhancedDoctors = doctors.map((doctor: any) => {
           const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
+
           return {
             ...doctor,
-            scheduleDetails: doctorSchedules.map(schedule => ({
-              kd_poli: schedule.kd_poli,
-              nm_poli: schedule.nm_poli,
-              hari_kerja: schedule.hari_kerja,
-              jam_mulai: schedule.jam_mulai,
-              jam_selesai: schedule.jam_selesai,
-              kuota: schedule.kuota,
-              consultation_fee: schedule.registrasi || 0,
-            }))
+            scheduleDetails: doctorSchedules.map(schedule => {
+              const schedDay = daysMap[schedule.hari_kerja.toUpperCase()];
+              const isToday = schedDay === todayDayInt;
+
+              // Calculate Quota
+              const totalQuota = schedule.kuota || 0;
+              // Only subtract if it's TODAY's schedule. For future days, we don't know yet (future feature)
+              const currentBooked = isToday ? (todayCounts.get(doctor.kd_dokter) || 0) : 0;
+              const remaining = Math.max(0, totalQuota - currentBooked);
+
+              return {
+                kd_poli: schedule.kd_poli,
+                nm_poli: schedule.nm_poli,
+                hari_kerja: schedule.hari_kerja,
+                jam_mulai: schedule.jam_mulai,
+                jam_selesai: schedule.jam_selesai,
+                kuota: totalQuota,
+                sisa_kuota: remaining, // Use this for display
+                is_today: isToday,
+                consultation_fee: schedule.registrasi || 0,
+              };
+            })
           };
         });
 
-        console.log('📋 [FIND_ALL] Returning names:', enhancedDoctors.map((d: any) => d.name).join(', '));
+        // console.log('📋 [FIND_ALL] Returning names:', enhancedDoctors.map((d: any) => d.name).join(', '));
         return enhancedDoctors;
     }
   }

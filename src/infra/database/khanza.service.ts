@@ -99,6 +99,10 @@ export class KhanzaService implements OnModuleInit {
     return this.bookingService.getBookingsByDate(date);
   }
 
+  async getBookingCountsByDate(date: string) {
+    return this.bookingService.getBookingCountsByDate(date);
+  }
+
   async getBookingsByPatient(noRm: string) {
     return this.bookingService.getBookingsByPatient(noRm);
   }

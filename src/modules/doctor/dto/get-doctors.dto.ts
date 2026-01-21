@@ -41,4 +41,7 @@ export class GetDoctorsDto {
         return value;
     })
     includeInactive?: boolean;
+
+    @IsOptional()
+    poliCode?: string;
 }
