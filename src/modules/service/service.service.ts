@@ -250,6 +250,12 @@ export class ServiceService {
         throw new NotFoundException(`Service item with id ${id} not found`);
     }
 
+    async getQueueInfo(id: string) {
+        // Assume id is the poli code (kd_poli)
+        const date = new Date().toISOString().split('T')[0]; // Current date YYYY-MM-DD
+        return this.khanzaService.getQueueInfo(id, date);
+    }
+
     // ===========================================================================
     // Seed Default Services
     // ===========================================================================

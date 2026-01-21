@@ -103,6 +103,10 @@ export class KhanzaService implements OnModuleInit {
     return this.bookingService.getBookingCountsByDate(date);
   }
 
+  async getQueueInfo(poliCode: string, date: string) {
+    return this.bookingService.getQueueInfo(poliCode, date);
+  }
+
   async getBookingsByPatient(noRm: string) {
     return this.bookingService.getBookingsByPatient(noRm);
   }

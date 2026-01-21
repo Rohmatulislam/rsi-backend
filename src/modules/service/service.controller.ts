@@ -74,4 +74,10 @@ export class ServiceController {
     findItemById(@Param('id') id: string) {
         return this.serviceService.findItemById(id);
     }
+
+    @Get('items/:id/queue')
+    @AllowAnonymous()
+    getQueueInfo(@Param('id') id: string) {
+        return this.serviceService.getQueueInfo(id);
+    }
 }

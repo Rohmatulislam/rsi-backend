@@ -219,6 +219,7 @@ model ServiceItem {
   features    String?
   icon        String?
   imageUrl    String?
+  videoUrl    String?
   isActive    Boolean  @default(true)
   order       Int      @default(0)
   createdAt   DateTime @default(now())
