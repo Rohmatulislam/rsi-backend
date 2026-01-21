@@ -2,6 +2,7 @@ import {
     Controller,
     Post,
     Get,
+    Query,
     Body,
     UseGuards,
     Request,
@@ -138,10 +139,17 @@ export class AuthController {
         return this.authService.resetPassword(token, password);
     }
 
+    @Get('verify-email')
+    @AllowAnonymous()
+    @HttpCode(HttpStatus.OK)
+    async verifyEmailGet(@Query('token') token: string) {
+        return this.authService.verifyEmail(token);
+    }
+
     @Post('verify-email')
     @AllowAnonymous()
     @HttpCode(HttpStatus.OK)
-    async verifyEmail(@Body('token') token: string) {
-        return this.authService.verifyEmail(token);
+    async verifyEmail(@Body('token') token: string, @Query('token') queryToken: string) {
+        return this.authService.verifyEmail(token || queryToken);
     }
 }

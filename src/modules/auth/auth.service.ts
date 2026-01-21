@@ -323,34 +323,50 @@ export class AuthService {
   }
   // Verify email with token
   async verifyEmail(token: string) {
+    this.logger.log(`Received verification request with token: ${token?.substring(0, 15)}...`);
+
+    if (!token) {
+      this.logger.error('Verification failed: No token provided');
+      throw new BadRequestException('Token tidak ditemukan');
+    }
+
     try {
       const payload = this.jwtService.verify(token);
+      this.logger.log(`Token payload decoded: ${JSON.stringify(payload)}`);
 
       if (payload.type !== 'verify-email') {
+        this.logger.error(`Verification failed: Invalid token type "${payload.type}"`);
         throw new BadRequestException('Token tidak valid');
       }
 
+      const userId = payload.sub;
+      this.logger.log(`Looking up user with ID: ${userId}`);
+
       const user = await this.prisma.user.findUnique({
-        where: { id: payload.sub },
+        where: { id: userId },
       });
 
       if (!user) {
+        this.logger.error(`Verification failed: User with ID ${userId} not found in database`);
         throw new BadRequestException('User tidak ditemukan');
       }
 
       if (user.emailVerified) {
+        this.logger.log(`User ${user.email} is already verified. No action needed.`);
         return { message: 'Email sudah terverifikasi' };
       }
 
+      this.logger.log(`Final update for user ${user.email} (ID: ${user.id}) - setting emailVerified to true`);
+
       // Update user
-      await this.prisma.user.update({
+      const updatedUser = await this.prisma.user.update({
         where: { id: user.id },
         data: {
           emailVerified: true,
         },
       });
 
-      this.logger.log(`Email verified for: ${user.email}`);
+      this.logger.log(`✅ SUCCESS: Email verified for user: ${updatedUser.email}. Database status: ${updatedUser.emailVerified}`);
 
       return { message: 'Email berhasil diverifikasi' };
     } catch (error) {
