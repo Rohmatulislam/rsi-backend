@@ -200,6 +200,7 @@ export class ServiceService {
     }
 
     async findItemById(id: string) {
+        // 1. Try to find in local DB first
         const item = await this.prisma.serviceItem.findUnique({
             where: { id },
             include: {
@@ -207,11 +208,46 @@ export class ServiceService {
             }
         });
 
-        if (!item) {
-            throw new NotFoundException(`Service item with id ${id} not found`);
+        if (item) {
+            return item;
         }
 
-        return item;
+        // 2. If not found, try to find in SIMRS (Khanza)
+        try {
+            const simrsPoli = await this.khanzaService.getPoliByKdPoli(id);
+
+            if (simrsPoli) {
+                // We need the parent service 'rawat-jalan' to attach it
+                const parentService = await this.prisma.service.findUnique({
+                    where: { slug: 'rawat-jalan' }
+                });
+
+                if (!parentService) return null; // Should not happen if seeded
+
+                // Construct a transient ServiceItem object
+                return {
+                    id: simrsPoli.kd_poli,
+                    serviceId: parentService.id,
+                    name: simrsPoli.nm_poli,
+                    description: `Layanan spesialis ${simrsPoli.nm_poli} dengan dokter berpengalaman.`,
+                    icon: this.getIconForPoli(simrsPoli.nm_poli),
+                    imageUrl: null,
+                    price: null,
+                    features: null,
+                    category: null,
+                    isActive: true,
+                    order: 99,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                    service: parentService
+                };
+            }
+        } catch (error) {
+            console.error(`Failed to find SIMRS poli with id ${id}:`, error);
+        }
+
+        // 3. If still not found, throw 404
+        throw new NotFoundException(`Service item with id ${id} not found`);
     }
 
     // ===========================================================================
