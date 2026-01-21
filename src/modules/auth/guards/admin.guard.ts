@@ -24,11 +24,16 @@ export class AdminGuard implements CanActivate {
 
                     this.logger.log(`AdminGuard: Token Payload=${JSON.stringify(payload)}`);
 
-                    if (payload.role === 'admin') {
+                    // Case-insensitive role check
+                    const userRole = payload.role ? payload.role.toLowerCase() : '';
+                    if (userRole === 'admin') {
                         request.user = payload;
                         return true;
                     } else {
                         this.logger.warn(`AdminGuard: Role mismatch. Expected 'admin', got '${payload.role}'`);
+                        // Use ForbiddenException (403) for authorized but not allowed users
+                        const { ForbiddenException } = require('@nestjs/common');
+                        throw new ForbiddenException('Akses ditolak - Hanya admin yang diizinkan');
                     }
                 } catch (error) {
                     this.logger.error(`AdminGuard: Token verification failed: ${error.message}`);
@@ -40,10 +45,12 @@ export class AdminGuard implements CanActivate {
             throw new UnauthorizedException('Akses ditolak - Login diperlukan');
         }
 
-        // Check if user is admin
-        if (user.role !== 'admin') {
+        // Check if user is admin (from request.user if already populated)
+        const userRole = user.role ? user.role.toLowerCase() : '';
+        if (userRole !== 'admin') {
             this.logger.warn(`AdminGuard: User role mismatch. Expected 'admin', got '${user.role}'`);
-            throw new UnauthorizedException('Akses ditolak - Hanya admin yang diizinkan');
+            const { ForbiddenException } = require('@nestjs/common');
+            throw new ForbiddenException('Akses ditolak - Hanya admin yang diizinkan');
         }
 
         return true;
