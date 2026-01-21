@@ -13,20 +13,30 @@ const prisma = new PrismaClient({
 } as any);
 
 async function main() {
-    console.log('Checking user count...');
-    const count = await prisma.user.count();
-    console.log(`Total users in database: ${count}`);
+    console.log('Checking specific admin user...');
 
-    // Get latest user
-    const latestUser = await prisma.user.findFirst({
-        orderBy: { createdAt: 'desc' },
-        select: { email: true, createdAt: true, name: true, emailVerified: true }
+    const email = 'rohmatulislam084@gmail.com';
+    const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            emailVerified: true,
+            createdAt: true
+        }
     });
 
-    if (latestUser) {
-        console.log('Latest user:', latestUser);
+    if (user) {
+        console.log('--------------------------------------------------');
+        console.log(`User Found: ${user.email}`);
+        console.log(`Role: [${user.role}] (Type: ${typeof user.role})`);
+        console.log(`Email Verified: ${user.emailVerified}`);
+        console.log(`ID: ${user.id}`);
+        console.log('--------------------------------------------------');
     } else {
-        console.log('No users found.');
+        console.log(`User with email ${email} NOT FOUND.`);
     }
 }
 
