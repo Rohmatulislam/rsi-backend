@@ -5,11 +5,14 @@ import { CreateServiceItemDto } from './dto/create-service-item.dto';
 import { UpdateServiceDto, UpdateServiceItemDto } from './dto/update-service.dto';
 import { FileUploadService } from './services/file-upload.service';
 
+import { KhanzaService } from '../../infra/database/khanza.service';
+
 @Injectable()
 export class ServiceService {
     constructor(
         private readonly prisma: PrismaService,
-        private readonly fileUploadService: FileUploadService
+        private readonly fileUploadService: FileUploadService,
+        private readonly khanzaService: KhanzaService
     ) { }
 
     // ===========================================================================
@@ -61,7 +64,62 @@ export class ServiceService {
             throw new NotFoundException(`Service with slug ${slug} not found`);
         }
 
+        // SIMRS Integration for Rawat Jalan
+        if (slug === 'rawat-jalan') {
+            try {
+                // Fetch active poli from SIMRS
+                const activePoli = await this.khanzaService.getPoliklinikWithActiveSchedules();
+
+                if (activePoli && activePoli.length > 0) {
+                    // Map to ServiceItems (Dynamic)
+                    const simrsItems = activePoli.map((poli, index) => ({
+                        id: poli.kd_poli, // Use kd_poli as ID for frontend key
+                        serviceId: service.id,
+                        name: poli.nm_poli,
+                        description: `Layanan spesialis ${poli.nm_poli} dengan dokter berpengalaman.`,
+                        icon: this.getIconForPoli(poli.nm_poli),
+                        imageUrl: null,
+                        isActive: true, // Assuming if it has schedule, it's active
+                        order: index + 1,
+                        price: null,
+                        features: null,
+                        category: null,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    }));
+
+                    // Return merged object (CMS Metadata + SIMRS Items)
+                    return {
+                        ...service,
+                        items: simrsItems
+                    };
+                }
+            } catch (error) {
+                console.error('Failed to fetch SIMRS poli for Rawat Jalan:', error);
+                // Fallback to local items if SIMRS fails
+            }
+        }
+
         return service;
+    }
+
+    private getIconForPoli(namaPoli: string): string {
+        const lower = namaPoli.toLowerCase();
+        if (lower.includes('anak')) return 'Baby';
+        if (lower.includes('bedah')) return 'Scalpel';
+        if (lower.includes('gigi')) return 'Smile';
+        if (lower.includes('jantung')) return 'Heart';
+        if (lower.includes('kandungan') || lower.includes('obgyn') || lower.includes('kebidanan')) return 'Baby';
+        if (lower.includes('mata')) return 'Eye';
+        if (lower.includes('paru')) return 'Wind';
+        if (lower.includes('dalam')) return 'Activity';
+        if (lower.includes('saraf') || lower.includes('syaraf')) return 'Brain';
+        if (lower.includes('tht')) return 'Ear';
+        if (lower.includes('kulit')) return 'Sparkles';
+        if (lower.includes('jiwa')) return 'BrainCircuit';
+        if (lower.includes('ortho')) return 'Bone';
+        if (lower.includes('rehab')) return 'PersonStanding';
+        return 'Stethoscope'; // Default
     }
 
     async update(id: string, updateServiceDto: UpdateServiceDto) {

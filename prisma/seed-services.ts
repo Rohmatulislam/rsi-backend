@@ -116,6 +116,80 @@ async function main() {
             icon: 'Stethoscope',
             isActive: true,
             order: 6
+            items: [
+                {
+                    name: 'Poli Penyakit Dalam',
+                    description: 'Layanan spesialis untuk diagnosis dan pengobatan penyakit organ dalam pada orang dewasa.',
+                    icon: 'Activity',
+                    order: 1
+                },
+                {
+                    name: 'Poli Bedah Umum',
+                    description: 'Layanan konsultasi dan tindakan bedah umum oleh dokter spesialis bedah.',
+                    icon: 'Scalpel',
+                    order: 2
+                },
+                {
+                    name: 'Poli Anak (Pediatri)',
+                    description: 'Layanan kesehatan menyeluruh untuk bayi, anak-anak, dan remaja.',
+                    icon: 'Baby',
+                    order: 3
+                },
+                {
+                    name: 'Poli Kandungan (Obgyn)',
+                    description: 'Layanan kesehatan wanita, kehamilan, dan persalinan.',
+                    icon: 'Baby',
+                    order: 4
+                },
+                {
+                    name: 'Poli Saraf (Neurologi)',
+                    description: 'Diagnosis dan pengobatan gangguan pada sistem saraf.',
+                    icon: 'Brain',
+                    order: 5
+                },
+                {
+                    name: 'Poli Mata',
+                    description: 'Pemeriksaan dan pengobatan kesehatan mata.',
+                    icon: 'Eye',
+                    order: 6
+                },
+                {
+                    name: 'Poli THT-KL',
+                    description: 'Layanan kesehatan Telinga, Hidung, Tenggorokan, dan Bedah Kepala Leher.',
+                    icon: 'Ear',
+                    order: 7
+                },
+                {
+                    name: 'Poli Gigi & Mulut',
+                    description: 'Layanan kesehatan gigi dan mulut umum serta spesialis.',
+                    icon: 'Smile',
+                    order: 8
+                },
+                {
+                    name: 'Poli Jantung',
+                    description: 'Pemeriksaan dan perawatan kesehatan jantung dan pembuluh darah.',
+                    icon: 'Heart',
+                    order: 9
+                },
+                {
+                    name: 'Poli Kulit & Kelamin',
+                    description: 'Diagnosis dan pengobatan penyakit kulit dan kelamin.',
+                    icon: 'Sparkles',
+                    order: 10
+                },
+                {
+                    name: 'Poli Orthopedi',
+                    description: 'Layanan bedah tulang, sendi, dan jaringan ikat.',
+                    icon: 'Bone',
+                    order: 11
+                },
+                {
+                    name: 'Poli Paru',
+                    description: 'Layanan kesehatan sistem pernapasan dan paru-paru.',
+                    icon: 'Wind',
+                    order: 12
+                }
+            ]
         }
     ];
 
@@ -128,6 +202,11 @@ async function main() {
         });
 
         if (items) {
+            // Delete existing items to prevent duplicates (Idempotency)
+            await prisma.serviceItem.deleteMany({
+                where: { serviceId: service.id }
+            });
+
             for (const item of items) {
                 await prisma.serviceItem.create({
                     data: {
