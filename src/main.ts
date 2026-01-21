@@ -38,7 +38,9 @@ async function bootstrap() {
       'http://localhost:3000',
       'http://localhost:3001',
       'http://localhost:5173',
-      'https://rsi-frontend.vercel.app'
+      'https://rsi-frontend.vercel.app',
+      'https://rsisitihajarmataram.co.id',
+      'https://www.rsisitihajarmataram.co.id',
     ];
 
   app.enableCors({
