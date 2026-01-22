@@ -197,6 +197,48 @@ export class BookingService {
     return nextNumber.toString().padStart(3, '0');
   }
 
+  async getQueueInfo(poliCode: string, date: string): Promise<{
+    total: number;
+    served: number;
+    current: string;
+    remaining: number;
+    currentDoctor?: string;
+  }> {
+    const bookings = await this.dbService.db('reg_periksa')
+      .leftJoin('dokter', 'reg_periksa.kd_dokter', '=', 'dokter.kd_dokter')
+      .where('reg_periksa.kd_poli', poliCode)
+      .where('reg_periksa.tgl_registrasi', date)
+      .andWhere('reg_periksa.stts', '!=', 'Batal')
+      .select('reg_periksa.no_reg', 'reg_periksa.stts', 'dokter.nm_dokter')
+      .orderBy('reg_periksa.no_reg', 'asc');
+
+    const total = bookings.length;
+
+    const servedBookings = bookings.filter(b =>
+      ['Sudah', 'Dirawat', 'Pulang', 'Rujuk', 'Bayar', 'Obat'].includes(b.stts as string)
+    );
+    const served = servedBookings.length;
+
+    let lastServed = '-';
+    let currentDoctor = '-';
+
+    if (servedBookings.length > 0) {
+      const last = servedBookings[servedBookings.length - 1];
+      lastServed = last.no_reg;
+      currentDoctor = last.nm_dokter;
+    }
+
+    const remaining = bookings.filter(b => b.stts === 'Belum').length;
+
+    return {
+      total,
+      served,
+      current: lastServed as string,
+      remaining,
+      currentDoctor
+    };
+  }
+
   async cancelBooking(noRawat: string) {
     try {
       this.logger.log(`Attempting to cancel booking in Khanza: ${noRawat}`);
