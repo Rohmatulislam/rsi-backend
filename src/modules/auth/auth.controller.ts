@@ -53,17 +53,24 @@ export class AuthController {
     async signInEmail(@Body() body: { email: string; password: string }) {
         const user = await this.authService.validateUser(body.email, body.password);
         if (!user) {
-            return { error: { code: 'INVALID_PASSWORD', message: 'Email atau password salah' } };
+            throw new HttpException(
+                {
+                    code: 'INVALID_PASSWORD',
+                    message: 'Email atau password salah',
+                },
+                HttpStatus.UNAUTHORIZED,
+            );
         }
 
         // Check verification
         if (!user.emailVerified) {
-            return {
-                error: {
+            throw new HttpException(
+                {
                     code: 'EMAIL_NOT_VERIFIED',
                     message: 'Email belum diverifikasi. Silakan cek kotak masuk email Anda.',
                 },
-            };
+                HttpStatus.UNAUTHORIZED,
+            );
         }
 
         const result = await this.authService.login(user);
