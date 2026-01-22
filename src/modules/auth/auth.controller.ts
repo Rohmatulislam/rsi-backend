@@ -8,6 +8,7 @@ import {
     Request,
     HttpCode,
     HttpStatus,
+    HttpException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService, RegisterDto, LoginDto } from './auth.service';
