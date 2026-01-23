@@ -421,7 +421,7 @@ export class DoctorService {
         // If filtering by Poli and no local doctors found, return empty (correct behavior)
         return [];
       }
-    } else if (getDoctorsDto.poliCode && kDoctorCodes.length === 0) {
+    } else if (getDoctorsDto.poliCode && kDoctorCodes.length === 0 && !getDoctorsDto.showAll) {
       // Poli filter requested but no schedules/doctors found
       return [];
     }
