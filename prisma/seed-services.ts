@@ -115,7 +115,7 @@ async function main() {
             description: 'Berbagai pilihan klinik spesialis untuk kebutuhan kesehatan Anda',
             icon: 'Stethoscope',
             isActive: true,
-            order: 6
+            order: 6,
             items: [
                 {
                     name: 'Poli Penyakit Dalam',
