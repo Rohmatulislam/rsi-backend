@@ -3,10 +3,16 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';
 
-// Create connection pool using DIRECT_URL for session mode (more reliable)
-const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL;
+// Prefer DATABASE_URL for pooled connections, fallback to DIRECT_URL
+const connectionString = process.env.DATABASE_URL || process.env.DIRECT_URL;
 
-const pool = connectionString ? new Pool({ connectionString }) : null;
+// Limit pool size in development to avoid "MaxClientsInSessionMode" error
+const pool = connectionString ? new Pool({
+  connectionString,
+  max: 2, // Low limit for dev to prevent exhaustion
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+}) : null;
 const adapter = pool ? new PrismaPg(pool) : undefined;
 
 @Injectable()

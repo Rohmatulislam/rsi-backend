@@ -964,15 +964,57 @@ export class DoctorService {
         const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter as any);
 
         if (kSchedules && kSchedules.length > 0) {
-          const scheduleDetails = kSchedules.map(schedule => ({
-            kd_poli: schedule.kd_poli,
-            nm_poli: schedule.nm_poli,
-            hari_kerja: schedule.hari_kerja,
-            jam_mulai: schedule.jam_mulai,
-            jam_selesai: schedule.jam_selesai,
-            kuota: schedule.kuota,
-            consultation_fee: schedule.registrasi || 0,
-          }));
+          // Identify today's registrations to prioritize the active polyclinic
+          const days = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+          const today = days[new Date().getDay()];
+          const todayDate = new Date().toISOString().split('T')[0];
+
+          // Fetch counts of registrations today for this doctor per poli to identify "actually active" poli
+          const counts = await this.khanzaService.db('reg_periksa')
+            .where('kd_dokter', doctor.kd_dokter)
+            .where('tgl_registrasi', todayDate)
+            .whereNot('stts', 'Batal')
+            .groupBy('kd_poli')
+            .select('kd_poli')
+            .count('* as count');
+
+          const queueCountMap = (counts as any[]).reduce((acc, curr) => {
+            acc[curr.kd_poli] = parseInt(String(curr.count));
+            return acc;
+          }, {} as Record<string, number>);
+
+          const scheduleDetails = kSchedules.map(schedule => {
+            const isToday = schedule.hari_kerja === today || (today === 'MINGGU' && schedule.hari_kerja === 'AKHAD');
+            return {
+              kd_poli: schedule.kd_poli,
+              nm_poli: schedule.nm_poli,
+              hari_kerja: schedule.hari_kerja,
+              jam_mulai: schedule.jam_mulai,
+              jam_selesai: schedule.jam_selesai,
+              kuota: schedule.kuota,
+              consultation_fee: schedule.registrasi || 0,
+              isToday,
+              todayQueueSize: queueCountMap[schedule.kd_poli] || 0,
+            };
+          });
+
+          // Sort by: isToday first, then todayQueueSize (descending), then jam_mulai (earliest first)
+          scheduleDetails.sort((a, b) => {
+            // 1. Is it today?
+            if (a.isToday && !b.isToday) return -1;
+            if (!a.isToday && b.isToday) return 1;
+
+            if (a.isToday && b.isToday) {
+              // 2. Which one has more queue today? (likely the "real" active poli)
+              if (a.todayQueueSize > b.todayQueueSize) return -1;
+              if (a.todayQueueSize < b.todayQueueSize) return 1;
+
+              // 3. Which one starts earlier?
+              return (a.jam_mulai || '').localeCompare(b.jam_mulai || '');
+            }
+
+            return 0;
+          });
 
           return {
             ...doctor,
