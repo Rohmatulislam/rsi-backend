@@ -204,39 +204,51 @@ export class BookingService {
     remaining: number;
     currentDoctor?: string;
   }> {
-    const bookings = await this.dbService.db('reg_periksa')
-      .leftJoin('dokter', 'reg_periksa.kd_dokter', '=', 'dokter.kd_dokter')
-      .where('reg_periksa.kd_poli', poliCode)
-      .where('reg_periksa.tgl_registrasi', date)
-      .andWhere('reg_periksa.stts', '!=', 'Batal')
-      .select('reg_periksa.no_reg', 'reg_periksa.stts', 'dokter.nm_dokter')
-      .orderBy('reg_periksa.no_reg', 'asc');
+    try {
+      const bookings = await this.dbService.db('reg_periksa')
+        .leftJoin('dokter', 'reg_periksa.kd_dokter', '=', 'dokter.kd_dokter')
+        .where('reg_periksa.kd_poli', poliCode)
+        .where('reg_periksa.tgl_registrasi', date)
+        .andWhere('reg_periksa.stts', '!=', 'Batal')
+        .select('reg_periksa.no_reg', 'reg_periksa.stts', 'dokter.nm_dokter')
+        .orderBy('reg_periksa.no_reg', 'asc');
 
-    const total = bookings.length;
+      const total = bookings.length;
 
-    const servedBookings = bookings.filter(b =>
-      ['Sudah', 'Dirawat', 'Pulang', 'Rujuk', 'Bayar', 'Obat'].includes(b.stts as string)
-    );
-    const served = servedBookings.length;
+      const servedBookings = bookings.filter(b =>
+        ['Sudah', 'Dirawat', 'Pulang', 'Rujuk', 'Bayar', 'Obat'].includes(b.stts as string)
+      );
+      const served = servedBookings.length;
 
-    let lastServed = '-';
-    let currentDoctor = '-';
+      let lastServed = '-';
+      let currentDoctor = '-';
 
-    if (servedBookings.length > 0) {
-      const last = servedBookings[servedBookings.length - 1];
-      lastServed = last.no_reg;
-      currentDoctor = last.nm_dokter;
+      if (servedBookings.length > 0) {
+        const last = servedBookings[servedBookings.length - 1];
+        lastServed = last.no_reg || '-';
+        currentDoctor = last.nm_dokter || '-';
+      }
+
+      const remaining = bookings.filter(b => b.stts === 'Belum').length;
+
+      return {
+        total,
+        served,
+        current: lastServed,
+        remaining,
+        currentDoctor
+      };
+    } catch (error) {
+      this.logger.error(`Error querying queue info for poli ${poliCode} on ${date}:`, error);
+      // Kembalikan data default jika terjadi error
+      return {
+        total: 0,
+        served: 0,
+        current: '-',
+        remaining: 0,
+        currentDoctor: '-'
+      };
     }
-
-    const remaining = bookings.filter(b => b.stts === 'Belum').length;
-
-    return {
-      total,
-      served,
-      current: lastServed as string,
-      remaining,
-      currentDoctor
-    };
   }
 
   async cancelBooking(noRawat: string) {

@@ -19,6 +19,10 @@ import { KhanzaDBService } from './khanza/khanza-db.service';
 export class KhanzaService implements OnModuleInit {
   private readonly logger = new Logger(KhanzaService.name);
 
+  // Cache untuk menyimpan hasil query queue info, valid selama 2 menit
+  private readonly queueCache = new Map<string, { data: any; timestamp: number }>();
+  private readonly QUEUE_CACHE_DURATION = 2 * 60 * 1000; // 2 menit dalam milidetik
+
   // Gunakan koneksi dari KhanzaDBService, bukan buat sendiri
   public get db(): Knex {
     return this.dbService.db;
@@ -104,7 +108,42 @@ export class KhanzaService implements OnModuleInit {
   }
 
   async getQueueInfo(poliCode: string, date: string) {
-    return this.bookingService.getQueueInfo(poliCode, date);
+    const cacheKey = `queue_${poliCode}_${date}`;
+    const now = Date.now();
+
+    // Cek apakah data ada di cache dan masih valid
+    const cached = this.queueCache.get(cacheKey);
+    if (cached && (now - cached.timestamp) < this.QUEUE_CACHE_DURATION) {
+      this.logger.debug(`Mengambil data queue info dari cache untuk poli ${poliCode} pada tanggal ${date}`);
+      return cached.data;
+    }
+
+    try {
+      const result = await this.bookingService.getQueueInfo(poliCode, date);
+
+      // Simpan hasil ke cache
+      this.queueCache.set(cacheKey, { data: result, timestamp: now });
+
+      return result;
+    } catch (error) {
+      this.logger.error(`Failed to get queue info for poli ${poliCode} on ${date}:`, error);
+
+      // Coba kembalikan data dari cache jika error terjadi, jika tersedia
+      const cachedOnError = this.queueCache.get(cacheKey);
+      if (cachedOnError && (now - cachedOnError.timestamp) < this.QUEUE_CACHE_DURATION) {
+        this.logger.warn(`Mengembalikan data queue info dari cache karena error terjadi untuk poli ${poliCode} pada tanggal ${date}`);
+        return cachedOnError.data;
+      }
+
+      // Jika tidak ada data cache, kembalikan data default
+      return {
+        total: 0,
+        served: 0,
+        current: '-',
+        remaining: 0,
+        currentDoctor: '-'
+      };
+    }
   }
 
   async getBookingsByPatient(noRm: string) {

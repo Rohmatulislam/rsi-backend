@@ -253,7 +253,19 @@ export class ServiceService {
     async getQueueInfo(id: string) {
         // Assume id is the poli code (kd_poli)
         const date = new Date().toISOString().split('T')[0]; // Current date YYYY-MM-DD
-        return this.khanzaService.getQueueInfo(id, date);
+        try {
+            return await this.khanzaService.getQueueInfo(id, date);
+        } catch (error) {
+            console.error(`Error getting queue info for poli ${id}:`, error);
+            // Kembalikan data default jika terjadi error
+            return {
+                total: 0,
+                served: 0,
+                current: '-',
+                remaining: 0,
+                currentDoctor: '-'
+            };
+        }
     }
 
     // ===========================================================================
