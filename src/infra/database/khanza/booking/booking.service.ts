@@ -205,31 +205,48 @@ export class BookingService {
     currentDoctor?: string;
   }> {
     try {
-      const bookings = await this.dbService.db('reg_periksa')
-        .leftJoin('dokter', 'reg_periksa.kd_dokter', '=', 'dokter.kd_dokter')
-        .where('reg_periksa.kd_poli', poliCode)
-        .where('reg_periksa.tgl_registrasi', date)
-        .andWhere('reg_periksa.stts', '!=', 'Batal')
-        .select('reg_periksa.no_reg', 'reg_periksa.stts', 'dokter.nm_dokter')
-        .orderBy('reg_periksa.no_reg', 'asc');
+      // 1. Optimized aggregation query to get counts and the last served registration number
+      const stats = await this.dbService.db('reg_periksa')
+        .where({
+          kd_poli: poliCode,
+          tgl_registrasi: date
+        })
+        .whereNot('stts', 'Batal')
+        .select([
+          this.dbService.db.raw('COUNT(*) as total'),
+          this.dbService.db.raw('SUM(CASE WHEN stts NOT IN ("Belum", "Batal") THEN 1 ELSE 0 END) as served'),
+          this.dbService.db.raw('MAX(CASE WHEN stts NOT IN ("Belum", "Batal") THEN no_reg ELSE NULL END) as currentReg'),
+          this.dbService.db.raw('SUM(CASE WHEN stts = "Belum" THEN 1 ELSE 0 END) as remaining')
+        ])
+        .first() as any;
 
-      const total = bookings.length;
-
-      const servedBookings = bookings.filter(b =>
-        ['Sudah', 'Dirawat', 'Pulang', 'Rujuk', 'Bayar', 'Obat'].includes(b.stts as string)
-      );
-      const served = servedBookings.length;
+      const total = parseInt(String(stats?.total || '0'));
+      const served = parseInt(String(stats?.served || '0'));
+      const remaining = parseInt(String(stats?.remaining || '0'));
+      const currentReg = stats?.currentReg;
 
       let lastServed = '-';
       let currentDoctor = '-';
 
-      if (servedBookings.length > 0) {
-        const last = servedBookings[servedBookings.length - 1];
-        lastServed = last.no_reg || '-';
-        currentDoctor = last.nm_dokter || '-';
-      }
+      // 2. If someone is being served, fetch the doctor's name for that specific registration
+      if (currentReg) {
+        lastServed = currentReg;
 
-      const remaining = bookings.filter(b => b.stts === 'Belum').length;
+        const doctorInfo = await this.dbService.db('reg_periksa')
+          .leftJoin('dokter', 'reg_periksa.kd_dokter', '=', 'dokter.kd_dokter')
+          .where({
+            kd_poli: poliCode,
+            tgl_registrasi: date,
+            no_reg: currentReg
+          })
+          .whereNot('reg_periksa.stts', 'Batal')
+          .select('dokter.nm_dokter')
+          .first();
+
+        if (doctorInfo) {
+          currentDoctor = doctorInfo.nm_dokter || '-';
+        }
+      }
 
       return {
         total,
@@ -240,7 +257,7 @@ export class BookingService {
       };
     } catch (error) {
       this.logger.error(`Error querying queue info for poli ${poliCode} on ${date}:`, error);
-      // Kembalikan data default jika terjadi error
+      // Return default values on error
       return {
         total: 0,
         served: 0,
