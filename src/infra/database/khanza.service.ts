@@ -19,9 +19,9 @@ import { KhanzaDBService } from './khanza/khanza-db.service';
 export class KhanzaService implements OnModuleInit {
   private readonly logger = new Logger(KhanzaService.name);
 
-  // Cache untuk menyimpan hasil query queue info, valid selama 2 menit
+  // Cache untuk menyimpan hasil query queue info, valid selama 5 menit
   private readonly queueCache = new Map<string, { data: any; timestamp: number }>();
-  private readonly QUEUE_CACHE_DURATION = 2 * 60 * 1000; // 2 menit dalam milidetik
+  private readonly QUEUE_CACHE_DURATION = 5 * 60 * 1000; // 5 menit dalam milidetik
 
   // Gunakan koneksi dari KhanzaDBService, bukan buat sendiri
   public get db(): Knex {

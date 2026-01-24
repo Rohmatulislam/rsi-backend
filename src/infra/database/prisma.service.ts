@@ -6,12 +6,13 @@ import { Pool } from 'pg';
 // Prefer DATABASE_URL for pooled connections, fallback to DIRECT_URL
 const connectionString = process.env.DATABASE_URL || process.env.DIRECT_URL;
 
-// Limit pool size in development to avoid "MaxClientsInSessionMode" error
+// Adjust pool size based on environment
+const isProduction = process.env.NODE_ENV === 'production';
 const pool = connectionString ? new Pool({
   connectionString,
-  max: 2, // Low limit for dev to prevent exhaustion
+  max: isProduction ? 15 : 2, // Higher limit for production, keep low for dev
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 2000,
+  connectionTimeoutMillis: 5000, // Increased timeout for stability
 }) : null;
 const adapter = pool ? new PrismaPg(pool) : undefined;
 

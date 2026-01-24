@@ -784,40 +784,24 @@ export class AppointmentService {
     this.logger.log(`Fetching queue status for Doc: ${doctorCode}, Poli: ${poliCode}, Date: ${date}`);
 
     try {
-      // 1. Get total patients (excluding cancelled)
-      const totalResult = await this.khanzaService.db('reg_periksa')
-        .where('kd_dokter', doctorCode)
-        .where('kd_poli', poliCode)
-        .where('tgl_registrasi', date)
+      // Optimized single query to get total, current, and waiting counts
+      const stats = await this.khanzaService.db('reg_periksa')
+        .where({
+          kd_dokter: doctorCode,
+          kd_poli: poliCode,
+          tgl_registrasi: date
+        })
         .whereNot('stts', 'Batal')
-        .count('* as count')
-        .first();
+        .select([
+          this.khanzaService.db.raw('COUNT(*) as totalQueue'),
+          this.khanzaService.db.raw('MAX(CASE WHEN stts != "Belum" THEN no_reg ELSE 0 END) as current'),
+          this.khanzaService.db.raw('SUM(CASE WHEN stts = "Belum" THEN 1 ELSE 0 END) as totalWaiting')
+        ])
+        .first() as any;
 
-      const totalQueue = parseInt(String(totalResult?.count || '0'));
-
-      // 2. Get current calling number
-      // We look for the maximum no_reg where status is NOT 'Belum' and NOT 'Batal'
-      // This represents the last person who was called to the room or finished
-      const currentResult = await this.khanzaService.db('reg_periksa')
-        .where('kd_dokter', doctorCode)
-        .where('kd_poli', poliCode)
-        .where('tgl_registrasi', date)
-        .whereNotIn('stts', ['Belum', 'Batal'])
-        .max('no_reg as current')
-        .first();
-
-      const currentNumber = currentResult?.current ? parseInt(currentResult.current) : 0;
-
-      // 3. Get total waiting (status is 'Belum')
-      const waitingResult = await this.khanzaService.db('reg_periksa')
-        .where('kd_dokter', doctorCode)
-        .where('kd_poli', poliCode)
-        .where('tgl_registrasi', date)
-        .where('stts', 'Belum')
-        .count('* as count')
-        .first();
-
-      const totalWaiting = parseInt(String(waitingResult?.count || '0'));
+      const totalQueue = parseInt(String(stats?.totalQueue || '0'));
+      const currentNumber = stats?.current ? parseInt(String(stats.current)) : 0;
+      const totalWaiting = parseInt(String(stats?.totalWaiting || '0'));
 
       return {
         doctorCode,
