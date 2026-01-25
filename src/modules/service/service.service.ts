@@ -70,30 +70,63 @@ export class ServiceService {
                 // Fetch active poli from SIMRS
                 const activePoli = await this.khanzaService.getPoliklinikWithActiveSchedules();
 
-                if (activePoli && activePoli.length > 0) {
-                    // Map to ServiceItems (Dynamic)
-                    const simrsItems = activePoli.map((poli, index) => ({
-                        id: poli.kd_poli, // Use kd_poli as ID for frontend key
-                        serviceId: service.id,
-                        name: poli.nm_poli,
-                        description: `Layanan spesialis ${poli.nm_poli} dengan dokter berpengalaman.`,
-                        icon: this.getIconForPoli(poli.nm_poli),
-                        imageUrl: null,
-                        isActive: true, // Assuming if it has schedule, it's active
-                        order: index + 1,
-                        price: null,
-                        features: null,
-                        category: null,
-                        createdAt: new Date(),
-                        updatedAt: new Date()
-                    }));
+                // Merge SIMRS items with CMS items (Seeded/Marketing data)
+                const cmsItems = service.items || [];
+                const mergedItems = [...cmsItems];
 
-                    // Return merged object (CMS Metadata + SIMRS Items)
-                    return {
-                        ...service,
-                        items: simrsItems
-                    };
+                if (activePoli && activePoli.length > 0) {
+                    // Unique SIMRS items by name to avoid duplicates like "UGD"
+                    const seenNames = new Set(cmsItems.map(i => i.name.toLowerCase()));
+
+                    activePoli.forEach((poli, index) => {
+                        const poliNameLower = poli.nm_poli.toLowerCase();
+
+                        // Check if this SIMRS poli matches any existing CMS item
+                        // Match if name contains each other (e.g. "Poli Anak" matches "Poliklinik Anak")
+                        const matchedIdx = mergedItems.findIndex(i => {
+                            const poliNameClean = poliNameLower.replace(/poliklinik|poli|klinik/gi, '').trim();
+                            const itemNameClean = i.name.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+
+                            if (poliNameClean.length < 3 || itemNameClean.length < 3) {
+                                return i.name.toLowerCase() === poliNameLower;
+                            }
+
+                            return itemNameClean.includes(poliNameClean) || poliNameClean.includes(itemNameClean);
+                        });
+
+                        if (matchedIdx !== -1) {
+                            // Link existing CMS item to SIMRS kd_poli
+                            // Prefer keeping the original item data but updating the ID to kd_poli
+                            // so that detail page can fetch live data from SIMRS
+                            if (mergedItems[matchedIdx].id.startsWith('cl')) { // Only update if it's a CUID
+                                mergedItems[matchedIdx].id = poli.kd_poli;
+                            }
+                        } else if (!seenNames.has(poliNameLower)) {
+                            // Add as new item if not matched and not already seen
+                            mergedItems.push({
+                                id: poli.kd_poli,
+                                serviceId: service.id,
+                                name: poli.nm_poli,
+                                description: `Layanan spesialis ${poli.nm_poli} dengan dokter berpengalaman.`,
+                                icon: this.getIconForPoli(poli.nm_poli),
+                                imageUrl: null,
+                                isActive: true,
+                                order: 100 + index, // Add at the end
+                                price: null,
+                                features: null,
+                                category: null,
+                                createdAt: new Date(),
+                                updatedAt: new Date()
+                            } as any);
+                            seenNames.add(poliNameLower);
+                        }
+                    });
                 }
+
+                return {
+                    ...service,
+                    items: mergedItems.sort((a, b) => (a.order || 0) - (b.order || 0))
+                };
             } catch (error) {
                 console.error('Failed to fetch SIMRS poli for Rawat Jalan:', error);
                 // Fallback to local items if SIMRS fails

@@ -29,16 +29,10 @@ export class PoliklinikService {
     // Jika tidak ada di cache atau sudah expired, ambil dari database
     this.logger.debug('Mengambil data poliklinik dari database SIMRS');
 
-    // Optimalkan query untuk mengambil jadwal berdasarkan hari hari ini (SENIN, SELASA, dll)
-    const days = ['AKHAD', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
-    const currentDay = days[new Date().getDay()];
-
-    this.logger.debug(`Mencari poliklinik aktif untuk hari: ${currentDay}`);
-
     const result = await this.dbService.db('jadwal')
       .select('poliklinik.kd_poli', 'poliklinik.nm_poli')
       .leftJoin('poliklinik', 'jadwal.kd_poli', 'poliklinik.kd_poli')
-      .where('jadwal.hari_kerja', currentDay)
+      .whereNotNull('poliklinik.nm_poli') // Pastikan poli memiliki nama
       .distinct();
 
     // Simpan hasil ke cache
