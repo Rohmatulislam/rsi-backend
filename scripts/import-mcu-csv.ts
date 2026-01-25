@@ -46,14 +46,28 @@ async function main() {
     for (let i = headerRowIdx + 1; i < lines.length; i++) {
         const row = lines[i].split(';');
         if (row.length < 3) continue;
-        if (row[0].toLowerCase().includes('diskon') || row[0].toLowerCase().includes('harga') || !row[0].trim()) continue;
+        const firstCol = row[0].toLowerCase().trim();
+        if (firstCol.includes('diskon') || firstCol.includes('harga') || !firstCol) continue;
 
         const itemName = row[0].trim();
+        const itemPrice = row[1] ? row[1].replace(/\./g, '').trim() : '0';
 
         packages.forEach(pkg => {
             const val = row[pkg.index] ? row[pkg.index].trim() : '';
             if (val && val !== '0' && val !== '-') {
-                pkg.items.push(itemName);
+                pkg.items.push(`${itemName}|${itemPrice}`);
+            }
+        });
+    }
+
+    // Handle admin row specifically
+    const adminRow = lines.find(l => l.toLowerCase().startsWith('admin'));
+    if (adminRow) {
+        const row = adminRow.split(';');
+        packages.forEach(pkg => {
+            const val = row[pkg.index] ? row[pkg.index].replace(/\./g, '').trim() : '';
+            if (val && val !== '0' && val !== '-') {
+                pkg.items.push(`Biaya Administrasi|${val}`);
             }
         });
     }
@@ -77,17 +91,26 @@ async function main() {
     // For now, let's just create them. If you want to replace, uncomment below:
     // await prisma.serviceItem.deleteMany({ where: { serviceId: mcuService.id } });
 
+    const getCategory = (name: string) => {
+        const lower = name.toLowerCase();
+        if (lower.includes('deteksi dini')) return 'Deteksi Dini';
+        if (lower.includes('skrining')) return 'Skrining';
+        if (lower.includes('mcu dasar') || lower.includes('mcu standar')) return 'Paket Umum';
+        if (lower.includes('golda') || lower.includes('macam')) return 'Paket Spesial';
+        return 'Lainnya';
+    };
+
     for (const pkg of packages) {
         const features = pkg.items.join(', ');
+        const category = getCategory(pkg.name);
 
         await prisma.serviceItem.upsert({
             where: {
-                // We need a unique way to identify them. Name + ServiceId should be unique usually, 
-                // but schema only has ID as PK.
                 id: `mcu-2026-${pkg.name.toLowerCase().replace(/\s+/g, '-')}`
             },
             update: {
                 name: pkg.name,
+                category: category,
                 description: `Paket MCU 2026: ${pkg.name}`,
                 price: pkg.price,
                 features: features,
@@ -98,6 +121,7 @@ async function main() {
                 id: `mcu-2026-${pkg.name.toLowerCase().replace(/\s+/g, '-')}`,
                 serviceId: mcuService.id,
                 name: pkg.name,
+                category: category,
                 description: `Paket MCU 2026: ${pkg.name}`,
                 price: pkg.price,
                 features: features,
@@ -106,7 +130,7 @@ async function main() {
                 order: pkg.index
             }
         });
-        console.log(`Imported: ${pkg.name} - Rp${pkg.price.toLocaleString('id-ID')}`);
+        console.log(`Imported: [${category}] ${pkg.name} - Rp${pkg.price.toLocaleString('id-ID')}`);
     }
 
     console.log('Import completed successfully.');

@@ -32,6 +32,7 @@ export class McuApiService {
                 id: item.id,
                 name: item.name,
                 price: item.price,
+                category: item.category || 'Umum',
                 description: item.description,
                 features: item.features,
                 source: 'local'
@@ -59,6 +60,7 @@ export class McuApiService {
                             id: pkg.id,
                             name: pkg.name,
                             price: pkg.price,
+                            category: pkg.category || 'SIMRS',
                             description: `Paket pemeriksaan kesehatan ${pkg.name}.`,
                             features: null,
                             source: 'simrs'
