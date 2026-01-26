@@ -1,10 +1,14 @@
 import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { FarmasiService } from './farmasi.service';
 import { SubmitPrescriptionDto } from './dto/submit-prescription.dto';
+import { PharmacyGateway } from './pharmacy.gateway';
 
 @Controller('farmasi')
 export class FarmasiController {
-    constructor(private readonly farmasiService: FarmasiService) { }
+    constructor(
+        private readonly farmasiService: FarmasiService,
+        private readonly pharmacyGateway: PharmacyGateway
+    ) { }
 
     @Get('prescription/status/:identifier')
     async getPrescriptionStatus(@Param('identifier') identifier: string) {
