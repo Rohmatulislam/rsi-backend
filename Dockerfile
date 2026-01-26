@@ -3,8 +3,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
+# Copy package files and configs
 COPY package*.json ./
+COPY tsconfig*.json ./
+COPY nest-cli.json ./
 COPY prisma ./prisma/
 COPY prisma.config.ts ./
 

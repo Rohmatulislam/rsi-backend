@@ -1,0 +1,15 @@
+
+node_modules
+dist
+.git
+.gitignore
+.env
+docker-compose.yml
+Dockerfile
+README.md
+npm-debug.log*
+.prettierrc
+.eslintrc.js
+prisma/migrations
+api
+scripts

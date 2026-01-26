@@ -8,4 +8,4 @@ export class UpdateDoctorImageDto {
   @IsString()
   @IsOptional()
   imageFile?: string; // Jika ingin menyimpan data gambar dalam format base64
-}PaymentRequestUpdateEvent
+}

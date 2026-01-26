@@ -1,4 +1,19 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "ES2021",
+    "skipLibCheck": true
+  },
+  "exclude": [
+    "node_modules",
+    "test",
+    "dist",
+    "api",
+    "scripts",
+    "prisma",
+    "*.ts",
+    "**/*spec.ts"
+  ]
 }
