@@ -7,6 +7,7 @@ import { DoctorSortBy, GetDoctorsDto } from './dto/get-doctors.dto';
 import { KhanzaService } from 'src/infra/database/khanza.service';
 import { FileUploadService } from './services/file-upload.service';
 import { NotificationService } from '../notification/notification.service';
+import { getTodayFormatted } from 'src/infra/utils/date.utils';
 
 import { Cron, CronExpression } from '@nestjs/schedule';
 
@@ -379,7 +380,7 @@ export class DoctorService {
         this.khanzaService.getDoctors(),
         this.khanzaService.getDoctorSchedulesWithPoliInfo(),
         this.khanzaService.getPoliklinik(),
-        this.khanzaService.getBookingCountsByDate(new Date().toISOString().split('T')[0])
+        this.khanzaService.getBookingCountsByDate(getTodayFormatted())
       ]);
 
       kDoctors = doctors;

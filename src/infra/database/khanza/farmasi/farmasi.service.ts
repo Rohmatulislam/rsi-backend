@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaDBService } from '../khanza-db.service';
+import { getTodayFormatted } from '../../../utils/date.utils';
 
 @Injectable()
 export class KhanzaFarmasiService {
@@ -115,7 +116,7 @@ export class KhanzaFarmasiService {
     async getDailyQueue() {
         try {
             const db = this.dbService.db;
-            const today = new Date().toISOString().split('T')[0];
+            const today = getTodayFormatted();
 
             return await db('resep_obat as r')
                 .select(

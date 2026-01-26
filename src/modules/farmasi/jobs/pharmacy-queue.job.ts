@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { KhanzaService } from '../../../infra/database/khanza.service';
 import { PharmacyGateway } from '../pharmacy.gateway';
+import { getTodayFormatted } from '../../../infra/utils/date.utils';
 
 @Injectable()
 export class PharmacyQueueJob {
@@ -17,7 +18,7 @@ export class PharmacyQueueJob {
 
     @Cron('*/10 * * * * *') // Every 10 seconds
     async handleCron() {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getTodayFormatted();
 
         // Reset tracking if day changes
         if (this.lastResetDate !== today) {
