@@ -99,7 +99,7 @@ export class KhanzaFarmasiService {
                     db.raw('SUM(g.stok) as total_stock')
                 )
                 .leftJoin('kodesatuan as s', 'd.kode_sat', 's.kode_sat')
-                .leftJoin('kategory_barang as k', 'd.kode_kategori', 'k.kode_kategori')
+                .leftJoin('kategori_barang as k', 'd.kode_kategori', 'k.kode')
                 .leftJoin('gudangbarang as g', 'd.kode_brng', 'g.kode_brng')
                 .where('d.status', '1')
                 .andWhere('d.nama_brng', 'like', `%${query}%`)

@@ -284,12 +284,43 @@ export class ServiceService {
     }
 
     async getQueueInfo(id: string) {
-        // Assume id is the poli code (kd_poli)
-        const date = new Date().toISOString().split('T')[0]; // Current date YYYY-MM-DD
+        let poliCode = id;
+
+        // 1. Resolve ID mapping if it's a CUID or slug (from local DB/CMS)
+        // SIMRS codes are usually short (e.g., U0017), so we check for longer IDs or known CUID prefix
+        if (id.startsWith('cl') || id.length > 5) {
+            try {
+                const item = await this.prisma.serviceItem.findUnique({
+                    where: { id },
+                    select: { name: true }
+                });
+
+                if (item) {
+                    // Try to find matching SIMRS code by name from active poliklinik list
+                    const activePoli = await this.khanzaService.getPoliklinik();
+                    const matched = activePoli.find(p => {
+                        const pName = p.nm_poli.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                        const iName = item.name.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                        // Partial match for flexibility (e.g. "Anak" matches "Poli Anak")
+                        return pName === iName || pName.includes(iName) || iName.includes(pName);
+                    });
+
+                    if (matched) {
+                        poliCode = matched.kd_poli;
+                    }
+                }
+            } catch (error) {
+                console.error(`Failed to resolve SIMRS poliCode for lookup ID ${id}:`, error);
+            }
+        }
+
+        // 2. Use the current date in Asia/Makassar (WITA)
+        const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+
         try {
-            return await this.khanzaService.getQueueInfo(id, date);
+            return await this.khanzaService.getQueueInfo(poliCode, date);
         } catch (error) {
-            console.error(`Error getting queue info for poli ${id}:`, error);
+            console.error(`Error getting queue info for poli ${poliCode} on ${date}:`, error);
             // Kembalikan data default jika terjadi error
             return {
                 total: 0,

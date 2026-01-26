@@ -112,6 +112,52 @@ export class FarmasiService {
 
     async searchMedicines(query: string) {
         this.logger.log(`Searching medicines for: ${query}`);
-        return this.khanzaService.farmasiService.searchMedicines(query);
+        const medicines = await this.khanzaService.farmasiService.searchMedicines(query);
+        return medicines.map(m => this.enhanceMedicine(m));
+    }
+
+    async getCategories() {
+        this.logger.log('Fetching medicine categories');
+        // Pre-defined user-friendly categories
+        return [
+            { id: 'OTC', name: 'Obat Bebas', icon: 'Pill' },
+            { id: 'VIT', name: 'Vitamin & Suplemen', icon: 'ShieldCheck' },
+            { id: 'KID', name: 'Ibu & Anak', icon: 'Heart' },
+            { id: 'ALKES', name: 'Alat Kesehatan', icon: 'Activity' },
+        ];
+    }
+
+    async getItemsByCategory(category: string) {
+        this.logger.log(`Fetching items for category: ${category}`);
+        // Map user-friendly category to SIMRS category keywords
+        let query = '';
+        if (category === 'VIT') query = 'vitamin';
+        if (category === 'OTC') query = 'paracetamol'; // Mock query for popular items
+        if (category === 'KID') query = 'anak';
+        if (category === 'ALKES') query = 'masker';
+
+        const medicines = await this.khanzaService.farmasiService.searchMedicines(query || category);
+        return medicines.map(m => this.enhanceMedicine(m));
+    }
+
+    private enhanceMedicine(m: any) {
+        // Add mock descriptions and images for popular items
+        const lowerName = m.name.toLowerCase();
+        let description = `Produk kesehatan ${m.name} berkualitas standar rumah sakit.`;
+        let image = '';
+
+        if (lowerName.includes('paracetamol')) {
+            description = 'Obat pereda nyeri dan penurun demam yang efektif.';
+            image = 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=400';
+        } else if (lowerName.includes('vitamin c')) {
+            description = 'Suplemen vitamin C untuk menjaga daya tahan tubuh.';
+            image = 'https://images.unsplash.com/photo-1616671285410-999338274d6c?w=400';
+        }
+
+        return {
+            ...m,
+            description,
+            image,
+        };
     }
 }

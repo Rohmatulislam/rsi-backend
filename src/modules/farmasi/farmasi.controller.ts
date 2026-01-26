@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { FarmasiService } from './farmasi.service';
 import { SubmitPrescriptionDto } from './dto/submit-prescription.dto';
 
@@ -19,5 +19,20 @@ export class FarmasiController {
     @Get('prescription/my/:userId')
     async getMyPrescriptions(@Param('userId') userId: string) {
         return this.farmasiService.getMyPrescriptions(userId);
+    }
+
+    @Get('search')
+    async searchMedicines(@Query('q') query: string) {
+        return this.farmasiService.searchMedicines(query);
+    }
+
+    @Get('categories')
+    async getCategories() {
+        return this.farmasiService.getCategories();
+    }
+
+    @Get('items/:category')
+    async getItemsByCategory(@Param('category') category: string) {
+        return this.farmasiService.getItemsByCategory(category);
     }
 }
