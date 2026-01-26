@@ -44,15 +44,13 @@ export class KhanzaFarmasiService {
             }
 
             // 2. Tentukan status
-            // Standard Khanza: Jika tgl_penyerahan sudah terisi, berarti sudah selesai
-            let status = 'MENUNGGU'; // Default
+            let status = 'MENUNGGU';
             let statusLabel = 'Dalam Antrean';
 
             if (resep.tgl_penyerahan && resep.tgl_penyerahan !== '0000-00-00') {
                 status = 'SELESAI';
                 statusLabel = 'Siap Diambil / Sudah Diserahkan';
             } else {
-                // Cek apakah sudah ada pemberian obat (artinya sedang diproses/diracik)
                 const isProcessing = await db('detail_pemberian_obat')
                     .where('no_rawat', resep.no_rawat)
                     .first();
@@ -107,6 +105,34 @@ export class KhanzaFarmasiService {
                 .limit(50);
         } catch (error) {
             this.logger.error('Error searching medicines in Khanza', error);
+            return [];
+        }
+    }
+
+    /**
+     * Mendapatkan antrean harian untuk Dashboard
+     */
+    async getDailyQueue() {
+        try {
+            const db = this.dbService.db;
+            const today = new Date().toISOString().split('T')[0];
+
+            return await db('resep_obat as r')
+                .select(
+                    'r.no_resep',
+                    'r.no_rawat',
+                    'r.jam',
+                    'p.nm_pasien',
+                    'r.tgl_penyerahan',
+                    'r.jam_penyerahan',
+                    db.raw('EXISTS(SELECT 1 FROM resep_dokter_racik WHERE no_resep = r.no_resep) as is_racik')
+                )
+                .join('reg_periksa as reg', 'r.no_rawat', 'reg.no_rawat')
+                .join('pasien as p', 'reg.no_rkm_medis', 'p.no_rkm_medis')
+                .where('r.tgl_perawatan', today)
+                .orderBy('r.jam', 'desc');
+        } catch (error) {
+            this.logger.error('Error fetching daily queue from Khanza', error);
             return [];
         }
     }

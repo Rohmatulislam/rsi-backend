@@ -10,6 +10,11 @@ export class FarmasiController {
         private readonly pharmacyGateway: PharmacyGateway
     ) { }
 
+    @Get('queue/daily')
+    async getDailyQueue() {
+        return this.farmasiService.getDailyQueue();
+    }
+
     @Get('prescription/status/:identifier')
     async getPrescriptionStatus(@Param('identifier') identifier: string) {
         return this.farmasiService.getPrescriptionStatus(identifier);

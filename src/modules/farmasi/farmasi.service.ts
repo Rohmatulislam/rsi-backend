@@ -140,6 +140,11 @@ export class FarmasiService {
         return medicines.map(m => this.enhanceMedicine(m));
     }
 
+    async getDailyQueue() {
+        this.logger.log('Fetching daily pharmacy queue');
+        return await this.khanzaService.farmasiService.getDailyQueue();
+    }
+
     private enhanceMedicine(m: any) {
         // Add mock descriptions and images for popular items
         const lowerName = m.name.toLowerCase();

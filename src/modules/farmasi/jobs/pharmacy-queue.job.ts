@@ -7,6 +7,7 @@ import { PharmacyGateway } from '../pharmacy.gateway';
 export class PharmacyQueueJob {
     private readonly logger = new Logger(PharmacyQueueJob.name);
     private processedResepIds = new Set<string>();
+    private lastQueueChecksum = '';
     private lastResetDate = '';
 
     constructor(
@@ -22,14 +23,28 @@ export class PharmacyQueueJob {
         if (this.lastResetDate !== today) {
             this.processedResepIds.clear();
             this.lastResetDate = today;
+            this.lastQueueChecksum = '';
             this.logger.log(`Queue tracker reset for new date: ${today}`);
         }
 
         try {
             const db = this.khanzaService.db;
 
-            // Fetch prescriptions validated today that haven't been processed yet
-            // In Khanza, tgl_penyerahan is set when prescription is ready/done
+            // 1. Fetch ALL prescriptions for today for the table (check status only)
+            const allDaily = await db('resep_obat as r')
+                .select('r.no_resep', 'r.tgl_penyerahan')
+                .where('r.tgl_perawatan', today);
+
+            const currentChecksum = JSON.stringify(allDaily);
+
+            // If something changed in the daily list (count or status), notify frontend
+            if (currentChecksum !== this.lastQueueChecksum) {
+                this.pharmacyGateway.server.to('pharmacy-queue').emit('queue-updated');
+                this.lastQueueChecksum = currentChecksum;
+                this.logger.log('Pharmacy queue changed, broadcasted update signal');
+            }
+
+            // 2. Fetch prescriptions newly validated for voice calling
             const readyPrescriptions = await db('resep_obat as r')
                 .select('r.no_resep', 'p.nm_pasien', 'r.no_rawat')
                 .join('reg_periksa as reg', 'r.no_rawat', 'reg.no_rawat')
