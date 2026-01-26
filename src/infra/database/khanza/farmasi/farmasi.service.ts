@@ -125,7 +125,7 @@ export class KhanzaFarmasiService {
                     'p.nm_pasien',
                     'r.tgl_penyerahan',
                     'r.jam_penyerahan',
-                    db.raw('EXISTS(SELECT 1 FROM resep_dokter_racik WHERE no_resep = r.no_resep) as is_racik')
+                    db.raw('EXISTS(SELECT 1 FROM resep_dokter_racikan WHERE no_resep = r.no_resep) as is_racik')
                 )
                 .join('reg_periksa as reg', 'r.no_rawat', 'reg.no_rawat')
                 .join('pasien as p', 'reg.no_rkm_medis', 'p.no_rkm_medis')

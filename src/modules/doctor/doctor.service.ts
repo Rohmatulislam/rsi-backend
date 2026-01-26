@@ -375,21 +375,50 @@ export class DoctorService {
 
     try {
       // Get all doctors from SIMRS Khanza
-      const [doctors, schedules, counts] = await Promise.all([
+      const [doctors, schedules, polis, counts] = await Promise.all([
         this.khanzaService.getDoctors(),
         this.khanzaService.getDoctorSchedulesWithPoliInfo(),
+        this.khanzaService.getPoliklinik(),
         this.khanzaService.getBookingCountsByDate(new Date().toISOString().split('T')[0])
       ]);
 
       kDoctors = doctors;
       kSchedules = schedules;
+      const kPolis = polis;
 
       // Map counts for quick lookup
       counts.forEach(c => todayCounts.set(c.kd_dokter, c.count));
 
       // 1. FILTER BY POLI CODE IF PROVIDED
       if (getDoctorsDto.poliCode) {
-        kSchedules = kSchedules.filter(s => s.kd_poli === getDoctorsDto.poliCode);
+        let actualPoliCode = getDoctorsDto.poliCode;
+
+        // Resolve ID mapping if it's a CUID or slug (from local DB/CMS)
+        // SIMRS codes are usually short (e.g., ANA), so we check for longer IDs or known CUID prefix
+        if (actualPoliCode.startsWith('cl') || actualPoliCode.length > 5) {
+          try {
+            const item = await this.prisma.serviceItem.findUnique({
+              where: { id: actualPoliCode },
+              select: { name: true }
+            });
+
+            if (item) {
+              const matched = kPolis.find(p => {
+                const pName = p.nm_poli.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                const iName = item.name.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                return pName === iName || pName.includes(iName) || iName.includes(pName);
+              });
+
+              if (matched) {
+                actualPoliCode = matched.kd_poli;
+              }
+            }
+          } catch (error) {
+            console.error(`Failed to resolve SIMRS poliCode for lookup ID ${actualPoliCode}:`, error);
+          }
+        }
+
+        kSchedules = kSchedules.filter(s => s.kd_poli === actualPoliCode);
       }
 
       if (!getDoctorsDto.showAll) {
