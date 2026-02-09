@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaDBService } from '../khanza-db.service';
+import { getCurrentTimeWita } from '../../../utils/date.utils';
 
 @Injectable()
 export class BookingService {
@@ -24,7 +25,7 @@ export class BookingService {
 
     // 3. Prepare Data
     // Default values mapping (Adjust based on Khanza logic/Enum)
-    const jamReg = new Date().toLocaleTimeString('id-ID', { hour12: false }).replace(/\./g, ':'); // HH:MM:SS
+    const jamReg = getCurrentTimeWita(); // HH:MM:SS in WITA
 
     const insertData = {
       no_reg: noReg,
@@ -195,6 +196,49 @@ export class BookingService {
     }
 
     return nextNumber.toString().padStart(3, '0');
+  }
+
+  /**
+   * Get list of patients in queue with their status (waiting/served)
+   */
+  async getQueuePatients(poliCode: string, date: string): Promise<{
+    patients: Array<{
+      no_reg: string;
+      nm_pasien: string;
+      stts: string;
+      jam_reg: string;
+      is_waiting: boolean;
+    }>;
+  }> {
+    try {
+      const patients = await this.dbService.db('reg_periksa as r')
+        .join('pasien as p', 'r.no_rkm_medis', 'p.no_rkm_medis')
+        .where({
+          'r.kd_poli': poliCode,
+          'r.tgl_registrasi': date
+        })
+        .whereNot('r.stts', 'Batal')
+        .select([
+          'r.no_reg',
+          'p.nm_pasien',
+          'r.stts',
+          'r.jam_reg'
+        ])
+        .orderBy('r.no_reg', 'asc');
+
+      return {
+        patients: patients.map(p => ({
+          no_reg: p.no_reg,
+          nm_pasien: p.nm_pasien,
+          stts: p.stts,
+          jam_reg: p.jam_reg,
+          is_waiting: p.stts === 'Belum'
+        }))
+      };
+    } catch (error) {
+      this.logger.error(`Error fetching queue patients for poli ${poliCode} on ${date}:`, error);
+      return { patients: [] };
+    }
   }
 
   async getQueueInfo(poliCode: string, date: string): Promise<{

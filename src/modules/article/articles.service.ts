@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
 import { PrismaService } from '../../infra/database/prisma.service';
@@ -6,31 +6,45 @@ import { FileUploadService } from './services/file-upload.service';
 
 @Injectable()
 export class ArticleService {
+    private readonly logger = new Logger(ArticleService.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly fileUploadService: FileUploadService
     ) { }
 
     async create(createArticleDto: CreateArticleDto) {
-        let imagePath = createArticleDto.image;
-        const { categoryIds, ...articleData } = createArticleDto;
+        try {
+            this.logger.log(`Creating article: ${createArticleDto.title}`);
+            let imagePath = createArticleDto.image;
+            const { categoryIds, ...articleData } = createArticleDto;
 
-        if (imagePath && imagePath.startsWith('data:image')) {
-            const ext = imagePath.split(';')[0].split('/')[1] || 'jpg';
-            const fileName = `article-${Date.now()}.${ext}`;
-            imagePath = await this.fileUploadService.saveArticleImage(imagePath, fileName);
+            if (imagePath && imagePath.startsWith('data:image')) {
+                const ext = imagePath.split(';')[0].split('/')[1] || 'jpg';
+                const fileName = `article-${Date.now()}.${ext}`;
+                imagePath = await this.fileUploadService.saveArticleImage(imagePath, fileName);
+            }
+
+            const result = await this.prisma.article.create({
+                data: {
+                    ...articleData,
+                    image: imagePath,
+                    categories: categoryIds ? {
+                        connect: categoryIds.map(id => ({ id }))
+                    } : undefined
+                },
+                include: { categories: true }
+            });
+
+            this.logger.log(`Article created successfully: ${result.slug}`);
+            return result;
+        } catch (error) {
+            this.logger.error('Failed to create article', error.stack);
+            if (error.code === 'P2002') {
+                throw new Error(`Slug ${createArticleDto.slug} already exists`);
+            }
+            throw error;
         }
-
-        return this.prisma.article.create({
-            data: {
-                ...articleData,
-                image: imagePath,
-                categories: categoryIds ? {
-                    connect: categoryIds.map(id => ({ id }))
-                } : undefined
-            },
-            include: { categories: true }
-        });
     }
 
     async findAll() {

@@ -4,6 +4,7 @@ import { RescheduleAppointmentDto } from './dto/reschedule-appointment.dto';
 import { KhanzaService } from '../../infra/database/khanza.service';
 import { PrismaService } from '../../infra/database/prisma.service';
 import { NotificationService, NotificationPayload } from '../notification/notification.service';
+import { getStartOfTodayWita } from '../../infra/utils/date.utils';
 
 @Injectable()
 export class AppointmentService {
@@ -105,8 +106,8 @@ export class AppointmentService {
 
     // 0.1 Validate booking date format and not in the past
     const bookingDate = new Date(createAppointmentDto.bookingDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Use WITA today
+    const today = getStartOfTodayWita();
 
     if (bookingDate < today) {
       throw new BadRequestException('Tanggal booking tidak boleh di masa lalu');
@@ -680,8 +681,7 @@ export class AppointmentService {
 
     // Validate new date is not in the past
     const newDate = new Date(rescheduleDto.newDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = getStartOfTodayWita();
 
     if (newDate < today) {
       throw new BadRequestException('Tanggal baru tidak boleh di masa lalu');

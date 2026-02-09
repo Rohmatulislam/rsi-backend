@@ -332,6 +332,47 @@ export class ServiceService {
         }
     }
 
+    /**
+     * Get list of patients in queue with their served/waiting status
+     */
+    async getQueuePatients(id: string) {
+        let poliCode = id;
+
+        // Resolve ID mapping if it's a CUID or slug
+        if (id.startsWith('cl') || id.length > 5) {
+            try {
+                const item = await this.prisma.serviceItem.findUnique({
+                    where: { id },
+                    select: { name: true }
+                });
+
+                if (item) {
+                    const activePoli = await this.khanzaService.getPoliklinik();
+                    const matched = activePoli.find(p => {
+                        const pName = p.nm_poli.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                        const iName = item.name.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                        return pName === iName || pName.includes(iName) || iName.includes(pName);
+                    });
+
+                    if (matched) {
+                        poliCode = matched.kd_poli;
+                    }
+                }
+            } catch (error) {
+                console.error(`Failed to resolve poliCode for ${id}:`, error);
+            }
+        }
+
+        const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+
+        try {
+            return await this.khanzaService.getQueuePatients(poliCode, date);
+        } catch (error) {
+            console.error(`Error getting queue patients for poli ${poliCode}:`, error);
+            return { patients: [] };
+        }
+    }
+
     // ===========================================================================
     // Seed Default Services
     // ===========================================================================

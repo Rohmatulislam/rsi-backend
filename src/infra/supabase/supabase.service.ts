@@ -40,6 +40,11 @@ export class SupabaseService {
         base64Data: string,
         contentType: string = 'image/jpeg'
     ): Promise<string> {
+        if (!this.supabase) {
+            const errorMsg = 'Supabase client is not initialized. Check SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables.';
+            this.logger.error(errorMsg);
+            throw new Error(errorMsg);
+        }
         try {
             // Convert base64 ke buffer
             const buffer = Buffer.from(base64Data, 'base64');

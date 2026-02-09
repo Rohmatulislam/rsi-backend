@@ -80,4 +80,10 @@ export class ServiceController {
     getQueueInfo(@Param('id') id: string) {
         return this.serviceService.getQueueInfo(id);
     }
+
+    @Get('items/:id/queue/patients')
+    @AllowAnonymous()
+    getQueuePatients(@Param('id') id: string) {
+        return this.serviceService.getQueuePatients(id);
+    }
 }

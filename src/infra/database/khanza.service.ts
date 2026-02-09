@@ -146,6 +146,13 @@ export class KhanzaService implements OnModuleInit {
     }
   }
 
+  /**
+   * Get list of patients in queue for a poliklinik
+   */
+  async getQueuePatients(poliCode: string, date: string) {
+    return this.bookingService.getQueuePatients(poliCode, date);
+  }
+
   async getBookingsByPatient(noRm: string) {
     return this.bookingService.getBookingsByPatient(noRm);
   }

@@ -13,7 +13,7 @@ import { NotificationService } from '../notification/notification.service';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'rsi-hospital-secret-key-2024',
-      signOptions: { expiresIn: '15m' },
+      signOptions: { expiresIn: '1d' },
     }),
   ],
   controllers: [AuthController],

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { AppointmentService } from '../appointment/appointment.service';
 import { PrismaService } from '../../infra/database/prisma.service';
+import { getStartOfTodayWita, formatWitaDate } from '../../infra/utils/date.utils';
 
 @Injectable()
 export class AdminService {
@@ -16,10 +17,13 @@ export class AdminService {
   async getDashboardStats() {
     const allAppointments = await this.appointmentService.getAllAppointments();
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // Use WITA dates
+    const today = getStartOfTodayWita();
+
+    // Rolling windows based on WITA today
     const weekAgo = new Date(today);
     weekAgo.setDate(weekAgo.getDate() - 7);
+
     const monthAgo = new Date(today);
     monthAgo.setMonth(monthAgo.getMonth() - 1);
 
@@ -55,7 +59,7 @@ export class AdminService {
       },
     });
 
-    const now = new Date();
+    const now = getStartOfTodayWita(); // Anchor context to Today WITA
     const trends: Array<{
       date: string;
       count: number;
@@ -69,7 +73,7 @@ export class AdminService {
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now);
         date.setDate(date.getDate() - i);
-        date.setHours(0, 0, 0, 0);
+        // date is already 00:00 WITA
 
         const nextDay = new Date(date);
         nextDay.setDate(nextDay.getDate() + 1);
@@ -80,7 +84,7 @@ export class AdminService {
         });
 
         trends.push({
-          date: date.toISOString().split('T')[0],
+          date: formatWitaDate(date),
           count: dayAppointments.length,
           scheduled: dayAppointments.filter(a => a.status === 'scheduled').length,
           completed: dayAppointments.filter(a => a.status === 'completed').length,
@@ -92,7 +96,7 @@ export class AdminService {
       for (let i = 7; i >= 0; i--) {
         const weekStart = new Date(now);
         weekStart.setDate(weekStart.getDate() - (weekStart.getDay() + i * 7));
-        weekStart.setHours(0, 0, 0, 0);
+        // weekStart is 00:00 WITA
 
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekEnd.getDate() + 7);
@@ -103,7 +107,7 @@ export class AdminService {
         });
 
         trends.push({
-          date: weekStart.toISOString().split('T')[0],
+          date: formatWitaDate(weekStart),
           count: weekAppointments.length,
           scheduled: weekAppointments.filter(a => a.status === 'scheduled').length,
           completed: weekAppointments.filter(a => a.status === 'completed').length,
@@ -113,8 +117,18 @@ export class AdminService {
     } else if (period === 'month' || period === 'year') {
       // Last 12 months
       for (let i = 11; i >= 0; i--) {
-        const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+        // Note: new Date(y, m, d) uses local system timezone.
+        // We should construct monthStart carefully to be WITA.
+        // But for month boundaries, maybe just getting YYYY-MM-01 string and creating WITA date is safer.
+
+        // Simpler approach:
+        const monthStart = new Date(now);
+        monthStart.setMonth(monthStart.getMonth() - i);
+        monthStart.setDate(1);
+        // monthStart is now 1st of month at 00:00 WITA (inherited time from now)
+
+        const monthEnd = new Date(monthStart);
+        monthEnd.setMonth(monthEnd.getMonth() + 1);
 
         const monthAppointments = appointments.filter(app => {
           const appDate = new Date(app.appointmentDate);
@@ -122,7 +136,7 @@ export class AdminService {
         });
 
         trends.push({
-          date: monthStart.toISOString().split('T')[0],
+          date: formatWitaDate(monthStart),
           count: monthAppointments.length,
           scheduled: monthAppointments.filter(a => a.status === 'scheduled').length,
           completed: monthAppointments.filter(a => a.status === 'completed').length,

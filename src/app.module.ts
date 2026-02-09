@@ -31,6 +31,8 @@ import { ChatModule } from './modules/chat/chat.module';
 import { CategoryModule } from './modules/category/category.module';
 import { StatsModule } from './modules/stats/stats.module';
 import { PartnerModule } from './modules/partner/partner.module';
+import { FinanceModule } from './modules/finance/finance.module';
+import { AccountingModule } from './modules/accounting/accounting.module';
 
 @Module({
   imports: [
@@ -66,6 +68,8 @@ import { PartnerModule } from './modules/partner/partner.module';
     CategoryModule,
     StatsModule,
     PartnerModule,
+    FinanceModule,
+    AccountingModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100,

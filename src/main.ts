@@ -55,5 +55,6 @@ async function bootstrap() {
   const port = process.env.PORT || 2000;
   await app.listen(port, '0.0.0.0');
   console.log(`🚀 Application is running on: http://0.0.0.0:${port}`);
+  console.log('Finance routes registered: /api/finance-stats/summary, /api/finance-stats/drug-profit, /api/finance-stats/payment-method');
 }
 bootstrap();

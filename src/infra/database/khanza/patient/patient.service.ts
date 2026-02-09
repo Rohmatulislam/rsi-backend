@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaDBService } from '../khanza-db.service';
+import { getTodayFormatted, getStartOfTodayWita } from '../../../utils/date.utils';
 
 @Injectable()
 export class PatientService {
@@ -59,7 +60,7 @@ export class PatientService {
 
       // Calculate age
       const birthDate = new Date(data.birthDate);
-      const today = new Date();
+      const today = getStartOfTodayWita();
       let age = today.getFullYear() - birthDate.getFullYear();
       const m = today.getMonth() - birthDate.getMonth();
       if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
@@ -190,7 +191,7 @@ export class PatientService {
         pekerjaan: data.occupation || '-',
         stts_nikah: data.maritalStatus || 'BELUM MENIKAH',
         agama: data.religion || 'ISLAM',
-        tgl_daftar: new Date().toISOString().split('T')[0],
+        tgl_daftar: getTodayFormatted(),
         no_tlp: data.phone,
         umur: `${age} Th 0 Bl 0 Hr`,
         pnd: data.education || '-',
