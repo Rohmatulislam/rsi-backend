@@ -64,28 +64,32 @@ export class ServiceService {
             throw new NotFoundException(`Service with slug ${slug} not found`);
         }
 
-        // SIMRS Integration for Rawat Jalan
-        if (slug === 'rawat-jalan') {
+        // SIMRS Integration for Poliklinik
+        if (slug === 'rawat-jalan' || slug === 'poli-executive') {
             try {
-                // Fetch active poli from SIMRS
-                const activePoli = await this.khanzaService.getPoliklinikWithActiveSchedules();
+                // Fetch active poli from SIMRS based on type
+                let activePoli = [];
+                if (slug === 'rawat-jalan') {
+                    activePoli = await this.khanzaService.poliklinikService.getPoliklinikRegularWithActiveSchedules();
+                } else if (slug === 'poli-executive') {
+                    activePoli = await this.khanzaService.poliklinikService.getPoliklinikExecutiveWithActiveSchedules();
+                }
 
                 // Merge SIMRS items with CMS items (Seeded/Marketing data)
                 const cmsItems = service.items || [];
                 const mergedItems = [...cmsItems];
 
                 if (activePoli && activePoli.length > 0) {
-                    // Unique SIMRS items by name to avoid duplicates like "UGD"
+                    // Unique SIMRS items by name to avoid duplicates
                     const seenNames = new Set(cmsItems.map(i => i.name.toLowerCase()));
 
                     activePoli.forEach((poli, index) => {
                         const poliNameLower = poli.nm_poli.toLowerCase();
 
                         // Check if this SIMRS poli matches any existing CMS item
-                        // Match if name contains each other (e.g. "Poli Anak" matches "Poliklinik Anak")
                         const matchedIdx = mergedItems.findIndex(i => {
-                            const poliNameClean = poliNameLower.replace(/poliklinik|poli|klinik/gi, '').trim();
-                            const itemNameClean = i.name.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                            const poliNameClean = poliNameLower.replace(/poliklinik|poli|klinik|eksekutif|ekskutif|executive/gi, '').trim();
+                            const itemNameClean = i.name.toLowerCase().replace(/poliklinik|poli|klinik|eksekutif|ekskutif|executive/gi, '').trim();
 
                             if (poliNameClean.length < 3 || itemNameClean.length < 3) {
                                 return i.name.toLowerCase() === poliNameLower;
@@ -95,14 +99,10 @@ export class ServiceService {
                         });
 
                         if (matchedIdx !== -1) {
-                            // Link existing CMS item to SIMRS kd_poli
-                            // Prefer keeping the original item data but updating the ID to kd_poli
-                            // so that detail page can fetch live data from SIMRS
-                            if (mergedItems[matchedIdx].id.startsWith('cl')) { // Only update if it's a CUID
+                            if (mergedItems[matchedIdx].id.startsWith('cl')) {
                                 mergedItems[matchedIdx].id = poli.kd_poli;
                             }
                         } else if (!seenNames.has(poliNameLower)) {
-                            // Add as new item if not matched and not already seen
                             mergedItems.push({
                                 id: poli.kd_poli,
                                 serviceId: service.id,
@@ -111,7 +111,7 @@ export class ServiceService {
                                 icon: this.getIconForPoli(poli.nm_poli),
                                 imageUrl: null,
                                 isActive: true,
-                                order: 100 + index, // Add at the end
+                                order: 100 + index,
                                 price: null,
                                 features: null,
                                 category: null,
@@ -128,8 +128,7 @@ export class ServiceService {
                     items: mergedItems.sort((a, b) => (a.order || 0) - (b.order || 0))
                 };
             } catch (error) {
-                console.error('Failed to fetch SIMRS poli for Rawat Jalan:', error);
-                // Fallback to local items if SIMRS fails
+                console.error(`Failed to fetch SIMRS poli for ${slug}:`, error);
             }
         }
 

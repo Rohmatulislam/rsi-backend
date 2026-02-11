@@ -105,7 +105,29 @@ async function main() {
             description: 'Konsultasi dokter spesialis dengan kenyamanan ekstra dan waktu tunggu minimal',
             icon: 'Crown',
             isActive: true,
-            order: 5
+            order: 5,
+            items: [
+                {
+                    name: 'Executive Internal Medicine',
+                    description: 'Konsultasi spesialis penyakit dalam dengan layanan prioritas.',
+                    order: 1
+                },
+                {
+                    name: 'Executive Pediatrics',
+                    description: 'Layanan kesehatan anak premium dengan ruang tunggu ramah anak.',
+                    order: 2
+                },
+                {
+                    name: 'Executive Obgyn',
+                    description: 'Pemeriksaan kehamilan dan kesehatan wanita eksklusif.',
+                    order: 3
+                },
+                {
+                    name: 'Executive Cardiology',
+                    description: 'Pemeriksaan jantung menyeluruh dengan peralatan modern.',
+                    order: 4
+                }
+            ]
         },
         {
             name: 'Rawat Jalan',

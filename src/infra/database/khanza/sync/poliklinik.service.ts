@@ -41,6 +41,26 @@ export class PoliklinikService {
     return result;
   }
 
+  async getPoliklinikExecutiveWithActiveSchedules() {
+    const result = await this.getPoliklinikWithActiveSchedules();
+    // Filter those containing 'Eksekutif' or 'Ekskutif'
+    return result.filter((poli: any) =>
+      poli.nm_poli.toLowerCase().includes('eksekutif') ||
+      poli.nm_poli.toLowerCase().includes('ekskutif') ||
+      poli.nm_poli.toLowerCase().includes('executive')
+    );
+  }
+
+  async getPoliklinikRegularWithActiveSchedules() {
+    const result = await this.getPoliklinikWithActiveSchedules();
+    // Filter those NOT containing 'Eksekutif' or 'Ekskutif'
+    return result.filter((poli: any) =>
+      !poli.nm_poli.toLowerCase().includes('eksekutif') &&
+      !poli.nm_poli.toLowerCase().includes('ekskutif') &&
+      !poli.nm_poli.toLowerCase().includes('executive')
+    );
+  }
+
   async getPoliByKdPoli(kdPoli: string) {
     return this.dbService.db('poliklinik').where('kd_poli', kdPoli).first();
   }
