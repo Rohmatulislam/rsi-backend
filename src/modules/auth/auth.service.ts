@@ -52,17 +52,25 @@ export class AuthService {
   // Register new user
   async register(registerDto: RegisterDto) {
     const { email, password, name, phone } = registerDto;
+    this.logger.log(`Registration attempt for email: ${email}`);
 
-    // Validate password strength
+    // Relaxed validation: only check length
     if (password.length < 8) {
+      this.logger.warn(`Validation failed: Password too short for ${email}`);
       throw new BadRequestException('Password minimal 8 karakter');
     }
+
+    /* 
+    // Commented out strict rules temporarily to debug
     if (!/[A-Z]/.test(password)) {
+      this.logger.warn(`Validation failed: No uppercase in password for ${email}`);
       throw new BadRequestException('Password harus mengandung huruf besar');
     }
     if (!/[0-9]/.test(password)) {
+      this.logger.warn(`Validation failed: No number in password for ${email}`);
       throw new BadRequestException('Password harus mengandung angka');
     }
+    */
 
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
@@ -70,6 +78,7 @@ export class AuthService {
     });
 
     if (existingUser) {
+      this.logger.warn(`Validation failed: Email already registered: ${email}`);
       throw new BadRequestException('Email sudah terdaftar');
     }
 
@@ -97,8 +106,9 @@ export class AuthService {
     );
 
     // Send verification email
+    this.logger.log(`Attempting to send verification email to: ${email}`);
     try {
-      await this.notificationService.sendEmail({
+      const emailSent = await this.notificationService.sendEmail({
         to: user.email,
         subject: 'Verifikasi Email - RSI Siti Hajar',
         html: `
@@ -121,20 +131,42 @@ export class AuthService {
           </div>
         `,
       });
-      this.logger.log(`Verification email sent to: ${email}`);
-    } catch (error) {
-      this.logger.error(`Failed to send verification email to ${email}: ${error.message}`);
-    }
 
-    return {
-      message: 'Registrasi berhasil. Silakan cek email Anda untuk verifikasi.',
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-      },
-    };
+      if (emailSent) {
+        this.logger.log(`✅ Verification email successfully sent to: ${email}`);
+        return {
+          message: 'Registrasi berhasil. Silakan cek email Anda untuk verifikasi.',
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          },
+        };
+      } else {
+        this.logger.error(`❌ Verification email failed to send to: ${email}`);
+        return {
+          message: 'Registrasi berhasil, namun gagal mengirim email verifikasi. Silakan hubungi admin (rsisitihajar0@gmail.com) atau silakan coba daftar kembali nanti.',
+          user: {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+          },
+        };
+      }
+    } catch (error) {
+      this.logger.error(`💥 Unexpected error during registration email send for ${email}: ${error.message}`);
+      return {
+        message: 'Registrasi berhasil, namun terjadi kesalahan sistem saat mengirim email. Akun Anda sudah terdaftar, silakan hubungi admin.',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role,
+        },
+      };
+    }
   }
 
   // Login user

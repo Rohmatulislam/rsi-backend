@@ -19,6 +19,7 @@ export class AuthController {
     constructor(private authService: AuthService) { }
 
     @Post('register')
+    @Post('signup/email')
     @AllowAnonymous()
     async register(@Body() registerDto: RegisterDto) {
         return this.authService.register(registerDto);
@@ -40,6 +41,7 @@ export class AuthController {
     }
 
     @Post('login')
+    @Post('signin/email')
     @AllowAnonymous()
     @UseGuards(AuthGuard('local'))
     @HttpCode(HttpStatus.OK)

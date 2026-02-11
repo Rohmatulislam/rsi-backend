@@ -10,6 +10,6 @@ README.md
 npm-debug.log*
 .prettierrc
 .eslintrc.js
-prisma/migrations
+
 api
 scripts
