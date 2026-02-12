@@ -50,16 +50,6 @@ export class AuthService {
       throw new BadRequestException('Password minimal 8 karakter');
     }
 
-    if (!/[A-Z]/.test(password)) {
-      this.logger.warn(`Validation failed: No uppercase in password for ${email}`);
-      throw new BadRequestException('Password harus mengandung huruf besar');
-    }
-
-    if (!/[0-9]/.test(password)) {
-      this.logger.warn(`Validation failed: No number in password for ${email}`);
-      throw new BadRequestException('Password harus mengandung angka');
-    }
-
     // Check if email already exists
     const existingUser = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase() },
