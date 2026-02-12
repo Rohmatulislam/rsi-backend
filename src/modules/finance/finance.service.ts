@@ -407,8 +407,22 @@ export class FinanceService implements OnModuleInit {
             const pctChange = (curr: number, prev: number) => prev > 0 ? Math.round(((curr - prev) / prev) * 1000) / 10 : (curr > 0 ? 100 : 0);
 
             return {
-                current: { ...currentData, startDate: current.startDate, endDate: current.endDate },
-                previous: { ...previousData, startDate: previous.startDate, endDate: previous.endDate },
+                revenue: currentData.revenue,
+                expenses: currentData.expenses,
+                drugProfit: currentData.drugProfit,
+                transactions: currentData.transactions,
+                netIncome: currentData.netIncome,
+                startDate: current.startDate,
+                endDate: current.endDate,
+                previous: {
+                    revenue: previousData.revenue,
+                    expenses: previousData.expenses,
+                    drugProfit: previousData.drugProfit,
+                    transactions: previousData.transactions,
+                    netIncome: previousData.netIncome,
+                    startDate: previous.startDate,
+                    endDate: previous.endDate,
+                },
                 changes: {
                     revenue: pctChange(currentData.revenue, previousData.revenue),
                     expenses: pctChange(currentData.expenses, previousData.expenses),
@@ -420,6 +434,308 @@ export class FinanceService implements OnModuleInit {
         } catch (error) {
             this.logger.error('Error fetching period comparison', error);
             return null;
+        }
+    }
+
+    async getAccountsPayableReport(period: 'daily' | 'monthly' | 'yearly', date?: string, customStart?: string, customEnd?: string) {
+        try {
+            const { startDate, endDate } = this.getDateRange(period, date, customStart, customEnd);
+            const db = this.khanzaDB.db;
+            const today = new Date();
+
+            // 1. Get all unpaid or partially paid purchase orders
+            const orders = await db('pemesanan as p')
+                .select(
+                    'p.no_faktur',
+                    'p.kode_suplier',
+                    's.nama_suplier',
+                    'p.tgl_pesan',
+                    'p.tgl_faktur',
+                    'p.tgl_tempo',
+                    'p.tagihan as totalAmount',
+                    'p.status'
+                )
+                .join('datasuplier as s', 'p.kode_suplier', 's.kode_suplier')
+                .whereNot('p.status', 'Sudah Dibayar')
+                .whereBetween('p.tgl_faktur', [startDate, endDate]);
+
+            // 2. Get all payments for these orders
+            const invoiceNumbers = orders.map(o => o.no_faktur);
+            const payments = await db('bayar_pemesanan')
+                .select('no_faktur')
+                .sum('besar_bayar as totalPaid')
+                .whereIn('no_faktur', invoiceNumbers)
+                .groupBy('no_faktur');
+
+            const paymentMap = new Map(payments.map(p => [p.no_faktur, Number(p.totalPaid) || 0]));
+
+            // 3. Process data and calculate aging
+            const agedData = orders.map(order => {
+                const totalPaid = paymentMap.get(order.no_faktur) || 0;
+                const balance = order.totalAmount - totalPaid;
+
+                if (balance <= 0) return null;
+
+                const dueDate = new Date(order.tgl_tempo);
+                const diffTime = today.getTime() - dueDate.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                let agingSegment = '0-30 Hari';
+                if (diffDays > 90) agingSegment = '90+ Hari';
+                else if (diffDays > 60) agingSegment = '61-90 Hari';
+                else if (diffDays > 30) agingSegment = '31-60 Hari';
+                else if (diffDays <= 0) agingSegment = 'Belum Jatuh Tempo';
+
+                return {
+                    ...order,
+                    totalPaid,
+                    balance,
+                    diffDays,
+                    agingSegment
+                };
+            }).filter(Boolean);
+
+            // 4. Summarize by supplier and aging
+            const summaryBySupplier = agedData.reduce((acc: any, curr: any) => {
+                if (!acc[curr.kode_suplier]) {
+                    acc[curr.kode_suplier] = {
+                        kode_suplier: curr.kode_suplier,
+                        nama_suplier: curr.nama_suplier,
+                        totalDebt: 0,
+                        invoiceCount: 0
+                    };
+                }
+                acc[curr.kode_suplier].totalDebt += curr.balance;
+                acc[curr.kode_suplier].invoiceCount += 1;
+                return acc;
+            }, {});
+
+            const agingSummary = agedData.reduce((acc: any, curr: any) => {
+                acc[curr.agingSegment] = (acc[curr.agingSegment] || 0) + curr.balance;
+                return acc;
+            }, {
+                'Belum Jatuh Tempo': 0,
+                '0-30 Hari': 0,
+                '31-60 Hari': 0,
+                '61-90 Hari': 0,
+                '90+ Hari': 0
+            });
+
+            return {
+                totalDebt: agedData.reduce((sum, item) => sum + item.balance, 0),
+                overdueDebt: agedData.reduce((sum, item) => item.diffDays > 0 ? sum + item.balance : sum, 0),
+                invoiceCount: agedData.length,
+                agingSummary: Object.entries(agingSummary).map(([name, value]) => ({ name, value })),
+                supplierSummary: Object.values(summaryBySupplier).sort((a: any, b: any) => b.totalDebt - a.totalDebt),
+                details: agedData.sort((a, b) => b.diffDays - a.diffDays)
+            };
+
+        } catch (error) {
+            this.logger.error('Error fetching accounts payable report', error);
+            throw error;
+        }
+    }
+
+    async getAccountsReceivableReport(period: 'daily' | 'monthly' | 'yearly', date?: string, customStart?: string, customEnd?: string) {
+        try {
+            const { startDate, endDate } = this.getDateRange(period, date, customStart, customEnd);
+            const db = this.khanzaDB.db;
+            const todayStr = new Date().toISOString().split('T')[0];
+
+            // 1. Get Main Aggregates (Total AR, Overdue AR, Count)
+            const mainSummary = await db('piutang_pasien as p')
+                .select(
+                    db.raw('SUM(sisapiutang) as totalAR'),
+                    db.raw('SUM(CASE WHEN tgltempo < ? THEN sisapiutang ELSE 0 END) as overdueAR', [todayStr]),
+                    db.raw('COUNT(DISTINCT no_rkm_medis) as patientCount'),
+                    db.raw('COUNT(*) as invoiceCount')
+                )
+                .where('status', 'Belum Lunas')
+                .andWhere('sisapiutang', '>', 0)
+                .whereBetween('tgl_piutang', [startDate, endDate])
+                .first();
+
+            // 2. Get Aging Summary (Aggregated in SQL)
+            const agingRes = await db('piutang_pasien as p')
+                .select(
+                    db.raw(`
+                        CASE 
+                            WHEN DATEDIFF(?, tgltempo) > 90 THEN "90+ Hari"
+                            WHEN DATEDIFF(?, tgltempo) > 60 THEN "61-90 Hari"
+                            WHEN DATEDIFF(?, tgltempo) > 30 THEN "31-60 Hari"
+                            WHEN DATEDIFF(?, tgltempo) > 0 THEN "0-30 Hari"
+                            ELSE "Belum Jatuh Tempo"
+                        END as name`, [todayStr, todayStr, todayStr, todayStr]
+                    ),
+                    db.raw('SUM(sisapiutang) as value')
+                )
+                .where('status', 'Belum Lunas')
+                .andWhere('sisapiutang', '>', 0)
+                .whereBetween('tgl_piutang', [startDate, endDate])
+                .groupBy('name');
+
+            // 3. Get Insurance Summary (Aggregated in SQL)
+            const insuranceRes = await db('piutang_pasien as p')
+                .select(
+                    db.raw('IFNULL(dp.nama_bayar, "UMUM/LAINNYA") as name'),
+                    db.raw('SUM(p.sisapiutang) as value')
+                )
+                .leftJoin('detail_piutang_pasien as dp', 'p.no_rawat', 'dp.no_rawat')
+                .where('p.status', 'Belum Lunas')
+                .andWhere('p.sisapiutang', '>', 0)
+                .whereBetween('p.tgl_piutang', [startDate, endDate])
+                .groupBy('name')
+                .orderBy('value', 'desc')
+                .limit(10); // Top 10 insurance providers
+
+            // 4. Get Top 1000 Details (Ordered by most overdue)
+            const details = await db('piutang_pasien as p')
+                .select(
+                    'p.no_rawat',
+                    'p.no_rkm_medis',
+                    'pas.nm_pasien',
+                    'p.tgl_piutang',
+                    'p.tgltempo',
+                    'p.totalpiutang as totalAmount',
+                    'p.sisapiutang as balance',
+                    'p.status',
+                    'dp.nama_bayar as penjab'
+                )
+                .join('pasien as pas', 'p.no_rkm_medis', 'pas.no_rkm_medis')
+                .leftJoin('detail_piutang_pasien as dp', 'p.no_rawat', 'dp.no_rawat')
+                .where('p.status', 'Belum Lunas')
+                .andWhere('p.sisapiutang', '>', 0)
+                .whereBetween('p.tgl_piutang', [startDate, endDate])
+                .orderBy('p.tgltempo', 'asc') // Most overdue first
+                .limit(1000);
+
+            // Post-process details to add agingSegment and diffDays (for UI)
+            const processedDetails = details.map(row => {
+                const today = new Date();
+                const dueDate = new Date(row.tgltempo);
+                const diffTime = today.getTime() - dueDate.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                let agingSegment = '0-30 Hari';
+                if (diffDays > 90) agingSegment = '90+ Hari';
+                else if (diffDays > 60) agingSegment = '61-90 Hari';
+                else if (diffDays > 30) agingSegment = '31-60 Hari';
+                else if (diffDays <= 0) agingSegment = 'Belum Jatuh Tempo';
+
+                return {
+                    ...row,
+                    diffDays,
+                    agingSegment,
+                    penjab: row.penjab || 'UMUM/LAINNYA'
+                };
+            });
+
+            // Ensure all aging buckets exist for the chart even if empty
+            const agingOrder = ['Belum Jatuh Tempo', '0-30 Hari', '31-60 Hari', '61-90 Hari', '90+ Hari'];
+            const agingMap = new Map((agingRes as any[]).map(i => [i.name, Number(i.value)]));
+            const finalAgingSummary = agingOrder.map(name => ({
+                name,
+                value: agingMap.get(name) || 0
+            }));
+
+            return {
+                totalAR: Number((mainSummary as any).totalAR) || 0,
+                overdueAR: Number((mainSummary as any).overdueAR) || 0,
+                patientCount: Number((mainSummary as any).patientCount) || 0,
+                invoiceCount: Number((mainSummary as any).invoiceCount) || 0,
+                agingSummary: finalAgingSummary,
+                insuranceSummary: (insuranceRes as any[]).map(i => ({ ...i, value: Number(i.value) })),
+                details: processedDetails
+            };
+
+        } catch (error) {
+            this.logger.error('Error fetching accounts receivable report', error);
+            throw error;
+        }
+    }
+
+    async getBPJSPerformanceReport(period: 'daily' | 'monthly' | 'yearly', date?: string, customStart?: string, customEnd?: string) {
+        try {
+            const { startDate, endDate } = this.getDateRange(period, date, customStart, customEnd);
+            const db = this.khanzaDB.db;
+
+            // 1. SEP Volume Trends (Last 6 Months)
+            // We keep trends at 6 months regardless of period for context
+            const volumeTrends = await db('bridging_sep')
+                .select(db.raw('DATE_FORMAT(tglsep, "%Y-%m") as month'))
+                .count('* as count')
+                .groupBy('month')
+                .orderBy('month', 'desc')
+                .limit(6);
+
+            // 2. Clinical Analysis: Top 10 Diagnoses
+            const topDiagnoses = await db('bridging_sep')
+                .select('diagawal as code', 'nmdiagnosaawal as name')
+                .count('* as count')
+                .whereNot('nmdiagnosaawal', '-')
+                .whereBetween('tglsep', [startDate, endDate])
+                .groupBy('diagawal', 'nmdiagnosaawal')
+                .orderBy('count', 'desc')
+                .limit(10);
+
+            // 3. Demographic: Participant Distribution
+            const participantDist = await db('bridging_sep')
+                .select('peserta as name')
+                .count('* as value')
+                .whereBetween('tglsep', [startDate, endDate])
+                .groupBy('peserta')
+                .orderBy('value', 'desc');
+
+            // 4. Class Distribution
+            const classDist = await db('bridging_sep')
+                .select('klsrawat as name')
+                .count('* as value')
+                .whereBetween('tglsep', [startDate, endDate])
+                .groupBy('klsrawat')
+                .orderBy('name', 'asc');
+
+            // 5. Service Type (Ralan vs Ranap)
+            // jnspelayanan: 1 = Ranap, 2 = Ralan
+            const serviceTypeDist = await db('bridging_sep')
+                .select(db.raw('CASE WHEN jnspelayanan = "1" THEN "Rawat Inap" ELSE "Rawat Jalan" END as name'))
+                .count('* as value')
+                .whereBetween('tglsep', [startDate, endDate])
+                .groupBy('name');
+
+            // 6. Recent SEPs in range
+            const recentSEPs = await db('bridging_sep')
+                .select(
+                    'no_sep',
+                    'no_rawat',
+                    'nomr',
+                    'nama_pasien',
+                    'tglsep',
+                    'nmdiagnosaawal as diagnosa',
+                    'nmpolitujuan as poli'
+                )
+                .whereBetween('tglsep', [startDate, endDate])
+                .orderBy('tglsep', 'desc')
+                .limit(50);
+
+            return {
+                summary: {
+                    totalSEP: await db('bridging_sep').whereBetween('tglsep', [startDate, endDate]).count('* as total').then(r => r[0].total),
+                    periodSEP: await db('bridging_sep').whereBetween('tglsep', [startDate, endDate]).count('* as total').then(r => r[0].total),
+                    topDiagnosis: topDiagnoses[0]?.name || '-',
+                },
+                trends: (volumeTrends as any[]).reverse(),
+                diagnoses: topDiagnoses,
+                participants: participantDist,
+                classes: classDist,
+                services: serviceTypeDist,
+                recent: recentSEPs,
+                startDate,
+                endDate
+            };
+
+        } catch (error) {
+            this.logger.error('Error fetching BPJS performance report', error);
+            throw error;
         }
     }
 }

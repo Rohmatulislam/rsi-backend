@@ -435,3 +435,19 @@ model Partner {
 
   @@map("partners")
 }
+
+model Budget {
+  id        String   @id @default(cuid())
+  category  String   // e.g., 'Biaya Medis', 'Gaji', 'Listrik', 'Total Pengeluaran'
+  amount    Float
+  period    String   // 'monthly' | 'yearly'
+  month     Int?     // 1-12
+  year      Int
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([category, period, month, year])
+  @@map("budgets")
+}
