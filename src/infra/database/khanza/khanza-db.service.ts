@@ -1,9 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import knex, { Knex } from 'knex';
 
 @Injectable()
-export class KhanzaDBService {
+export class KhanzaDBService implements OnModuleDestroy {
   private readonly logger = new Logger(KhanzaDBService.name);
   public db: Knex;
 
@@ -47,6 +47,15 @@ export class KhanzaDBService {
     } catch (error) {
       this.logger.error('Database connection failed', error);
       return false;
+    }
+  }
+
+  async onModuleDestroy() {
+    try {
+      await this.db.destroy();
+      this.logger.log('Khanza DB connection pool closed.');
+    } catch (error) {
+      this.logger.error('Error closing Khanza DB connection pool:', error);
     }
   }
 }

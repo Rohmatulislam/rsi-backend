@@ -28,7 +28,7 @@ export class FarmasiService {
         }
 
         // 2. If not found in SIMRS, check local digital submissions
-        const localPrescription = await (this.prisma as any).prescription.findFirst({
+        const localPrescription = await this.prisma.prescription.findFirst({
             where: {
                 OR: [
                     { id: identifier },
@@ -82,7 +82,7 @@ export class FarmasiService {
             );
         }
 
-        const data = await (this.prisma as any).prescription.create({
+        const data = await this.prisma.prescription.create({
             data: {
                 userId: dto.userId,
                 patientName: dto.patientName,

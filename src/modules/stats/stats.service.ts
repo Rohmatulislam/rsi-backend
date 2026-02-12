@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/infra/database/prisma.service';
 
 const VISITOR_COUNT_KEY = 'visitor_count';
 
 @Injectable()
 export class StatsService {
+    private readonly logger = new Logger(StatsService.name);
     constructor(private readonly prisma: PrismaService) { }
 
     /**
@@ -17,7 +18,7 @@ export class StatsService {
             });
             return stats?.value ?? 0;
         } catch (error) {
-            console.error('Error fetching visitor count (possibly missing table):', error.message);
+            this.logger.error('Error fetching visitor count (possibly missing table):', error.message);
             return 0;
         }
     }
@@ -41,7 +42,7 @@ export class StatsService {
             });
             return stats.value;
         } catch (error) {
-            console.error('Error incrementing visitor count (possibly missing table):', error.message);
+            this.logger.error('Error incrementing visitor count (possibly missing table):', error.message);
             return 0;
         }
     }

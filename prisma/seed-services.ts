@@ -72,8 +72,48 @@ async function main() {
                     name: 'Kelas 2',
                     price: 450000,
                     description: 'Kenyamanan lebih dengan kapasitas kamar yang lebih sedikit.',
-                    features: 'AC Split,Kamar Mandi Dalam,TV LED 32",Tirai Penyekat,Nakas',
+                    features: 'AC Split,Kamar Mandi Dalam,TV LED 32",Tirai Penyekat,Nakas,Kursi Penunggu Standar',
                     order: 2
+                },
+                {
+                    category: 'Gedung Zam-zam',
+                    name: 'Kelas 1',
+                    price: 650000,
+                    description: 'Ruang perawatan privat untuk kenyamanan maksimal pasien dan keluarga.',
+                    features: 'AC Split,Kamar Mandi Dalam (Water Heater),TV LED 32",Kulkas,Sofa Tamu,Nakas,Overbed Table',
+                    order: 3
+                },
+                {
+                    category: 'Gedung Arafah',
+                    name: 'VIP A',
+                    price: 1100000,
+                    description: 'Kamar VIP luas dengan ruang tunggu terpisah.',
+                    features: 'AC,Smart TV 43",Kulkas 2 Pintu,Dispenser,Sofa Bed,Lemari Pakaian,Kamar Mandi Luas (Water Heater),Welcome Fruit',
+                    order: 4
+                },
+                {
+                    category: 'Gedung Arafah',
+                    name: 'VIP B',
+                    price: 950000,
+                    description: 'Kamar VIP standar dengan fasilitas lengkap.',
+                    features: 'AC,TV LED 40",Kulkas 1 Pintu,Sofa Bed,Lemari Kecil,Kamar Mandi Dalam (Water Heater)',
+                    order: 5
+                },
+                {
+                    category: 'Gedung Jabal Rahmah',
+                    name: 'VVIP Suite',
+                    price: 2000000,
+                    description: 'Suite mewah dengan ruang tamu dan pantry pribadi.',
+                    features: 'AC,Smart TV 50",Private Pantry,Microwave,Kulkas Besar,Ruang Tamu Sofa Kulit,Meja Makan,Extra Bed Penunggu,Amenity Premium',
+                    order: 6
+                },
+                {
+                    category: 'Gedung Jabal Rahmah',
+                    name: 'VVIP',
+                    price: 1500000,
+                    description: 'Kamar VVIP luas dengan fasilitas eksklusif.',
+                    features: 'AC,Smart TV 43",Kulkas,Sofa Bed Premium,Meja Kerja,Amenity Lengkap',
+                    order: 7
                 }
             ]
         },

@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Logger, Query, UseGuards } from '@nestjs/common';
 import { FinanceService } from './finance.service';
 
 import { AdminGuard } from '../auth/guards/admin.guard';
@@ -6,6 +6,7 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 @Controller('finance-stats')
 @UseGuards(AdminGuard)
 export class FinanceController {
+    private readonly logger = new Logger(FinanceController.name);
     constructor(private readonly financeService: FinanceService) { }
 
     @Get('drug-profit')
@@ -15,7 +16,7 @@ export class FinanceController {
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
     ) {
-        console.log('GET /finance-stats/drug-profit', { period, date, startDate, endDate });
+        this.logger.log(`GET /finance-stats/drug-profit ${JSON.stringify({ period, date, startDate, endDate })}`);
         return this.financeService.getDrugProfitReport(period, date, startDate, endDate);
     }
 
@@ -26,7 +27,7 @@ export class FinanceController {
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
     ) {
-        console.log('GET /finance-stats/payment-method', { period, date, startDate, endDate });
+        this.logger.log(`GET /finance-stats/payment-method ${JSON.stringify({ period, date, startDate, endDate })}`);
         return this.financeService.getPaymentMethodReport(period, date, startDate, endDate);
     }
 
@@ -37,13 +38,13 @@ export class FinanceController {
         @Query('startDate') startDate?: string,
         @Query('endDate') endDate?: string,
     ) {
-        console.log('GET /finance-stats/summary', { period, date, startDate, endDate });
+        this.logger.log(`GET /finance-stats/summary ${JSON.stringify({ period, date, startDate, endDate })}`);
         return this.financeService.getFinancialSummary(period, date, startDate, endDate);
     }
 
     @Get('trends')
     async getFinancialTrends() {
-        console.log('GET /finance-stats/trends');
+        this.logger.log('GET /finance-stats/trends');
         return this.financeService.getFinancialTrends();
     }
 }

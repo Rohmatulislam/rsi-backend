@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { KhanzaService } from '../../infra/database/khanza.service';
+import { RadiologiService as KhanzaRadiologiService } from '../../infra/database/khanza/sync/radiologi.service';
 
 @Injectable()
 export class RadiologiService {
     private readonly logger = new Logger(RadiologiService.name);
 
-    constructor(private readonly khanzaService: KhanzaService) { }
+    constructor(private readonly khanzaRadiologiService: KhanzaRadiologiService) { }
 
     async getTests(kd_pj?: string) {
-        const tests = await this.khanzaService.radiologiService.getTests(kd_pj);
+        const tests = await this.khanzaRadiologiService.getTests(kd_pj);
 
         // Apply smart categorization
         return tests.map(test => ({
@@ -18,11 +18,11 @@ export class RadiologiService {
     }
 
     async getGuarantors() {
-        return this.khanzaService.radiologiService.getGuarantors();
+        return this.khanzaRadiologiService.getGuarantors();
     }
 
     async getTestById(id: string) {
-        const test = await this.khanzaService.radiologiService.getTestById(id);
+        const test = await this.khanzaRadiologiService.getTestById(id);
         if (!test) return null;
 
         return {
@@ -41,7 +41,7 @@ export class RadiologiService {
         const upperName = name.toUpperCase();
         if (upperName.includes('USG')) return 'USG';
         if (upperName.includes('MRI')) return 'MRI';
-        if (upperName.includes('CT SCAN') || upperName.includes('CT SCAN')) return 'CT Scan';
+        if (upperName.includes('CT SCAN')) return 'CT Scan';
         if (
             upperName.includes('THORAX') ||
             upperName.includes('FOTO') ||

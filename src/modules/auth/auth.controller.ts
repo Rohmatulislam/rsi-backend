@@ -11,7 +11,8 @@ import {
     HttpException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { AuthService, RegisterDto, LoginDto } from './auth.service';
+import { AuthService } from './auth.service';
+import { RegisterDto, LoginDto } from './dto/auth.dto';
 import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 
 @Controller('auth')

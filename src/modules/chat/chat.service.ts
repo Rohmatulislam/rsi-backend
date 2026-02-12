@@ -26,11 +26,26 @@ KONTAK:
 
 PENTING: Jika ada DATA DOKTER atau JADWAL yang diberikan dalam context, gunakan informasi tersebut untuk menjawab pertanyaan user. Jangan bilang "tidak bisa memberikan" jika datanya sudah tersedia.`;
 
+/** Max sessions kept in memory before evicting oldest */
+const MAX_SESSIONS = 100;
+/** Session expires after 30 minutes of inactivity */
+const SESSION_TTL_MS = 30 * 60 * 1000;
+
+interface SessionEntry {
+    session: ChatSession;
+    lastAccessed: number;
+}
+
 @Injectable()
 export class ChatService implements OnModuleInit {
     private readonly logger = new Logger(ChatService.name);
     private model: GenerativeModel | null = null;
-    private chatSession: ChatSession | null = null;
+
+    /**
+     * Per-conversation chat sessions keyed by sessionId.
+     * Prevents context leaking between different users/conversations.
+     */
+    private readonly sessions = new Map<string, SessionEntry>();
 
     constructor(
         private readonly doctorService: DoctorService,
@@ -50,12 +65,59 @@ export class ChatService implements OnModuleInit {
                 model: 'gemini-flash-latest',
                 systemInstruction: SYSTEM_PROMPT,
             });
-            this.chatSession = this.model.startChat({
-                history: [],
-            });
             this.logger.log('Gemini AI initialized successfully.');
         } catch (error) {
             this.logger.error('Failed to initialize Gemini AI:', error);
+        }
+    }
+
+    /**
+     * Get or create a chat session for a given sessionId.
+     * Each user/conversation gets its own isolated session.
+     */
+    private getOrCreateSession(sessionId: string): ChatSession | null {
+        if (!this.model) return null;
+
+        const existing = this.sessions.get(sessionId);
+        const now = Date.now();
+
+        if (existing && (now - existing.lastAccessed) < SESSION_TTL_MS) {
+            existing.lastAccessed = now;
+            return existing.session;
+        }
+
+        // Evict expired sessions or oldest if over limit
+        this.evictStaleSessions();
+
+        const session = this.model.startChat({ history: [] });
+        this.sessions.set(sessionId, { session, lastAccessed: now });
+        return session;
+    }
+
+    /**
+     * Remove expired sessions and enforce max session count.
+     */
+    private evictStaleSessions(): void {
+        const now = Date.now();
+
+        // Remove expired sessions
+        for (const [key, entry] of this.sessions) {
+            if (now - entry.lastAccessed > SESSION_TTL_MS) {
+                this.sessions.delete(key);
+            }
+        }
+
+        // If still over limit, remove oldest
+        if (this.sessions.size >= MAX_SESSIONS) {
+            let oldestKey: string | null = null;
+            let oldestTime = Infinity;
+            for (const [key, entry] of this.sessions) {
+                if (entry.lastAccessed < oldestTime) {
+                    oldestTime = entry.lastAccessed;
+                    oldestKey = key;
+                }
+            }
+            if (oldestKey) this.sessions.delete(oldestKey);
         }
     }
 
@@ -261,8 +323,6 @@ export class ChatService implements OnModuleInit {
         // Remove common words that aren't part of doctor names
         const stopWords = ['hari', 'ini', 'besok', 'lusa', 'minggu', 'senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'apa', 'ada', 'kapan', 'jam', 'berapa', 'apakah', 'siapa', 'dimana', 'hari ini', 'hari besok'];
 
-        let cleanMessage = message.toLowerCase();
-
         // Pattern: "jadwal dokter X" or "jadwal dr. X" or "dr X"
         const patterns = [
             /jadwal\s+(?:dokter|dr\.?)\s+([a-zA-Z]+)/i,
@@ -283,8 +343,13 @@ export class ChatService implements OnModuleInit {
         return null;
     }
 
-    async processMessage(message: string): Promise<string> {
-        this.logger.log(`Processing message: ${message}`);
+    /**
+     * Process a chat message. Each sessionId gets its own isolated AI conversation.
+     * @param message - The user's message
+     * @param sessionId - Unique session identifier (defaults to 'default' for backward compatibility)
+     */
+    async processMessage(message: string, sessionId: string = 'default'): Promise<string> {
+        this.logger.log(`Processing message (session: ${sessionId}): ${message}`);
 
         // Check if asking about doctor schedule
         if (this.isDoctorQuery(message)) {
@@ -299,12 +364,12 @@ export class ChatService implements OnModuleInit {
                     return scheduleInfo;
                 }
 
-
                 // Otherwise, let AI handle with context
-                if (this.chatSession) {
+                const chatSession = this.getOrCreateSession(sessionId);
+                if (chatSession) {
                     const contextMessage = `[CONTEXT: User mencari jadwal dokter "${doctorName}". Hasil pencarian: ${scheduleInfo}]\n\nUser: ${message}`;
                     try {
-                        const result = await this.chatSession.sendMessage(contextMessage);
+                        const result = await chatSession.sendMessage(contextMessage);
                         return result.response.text();
                     } catch (error) {
                         return scheduleInfo;
@@ -314,13 +379,14 @@ export class ChatService implements OnModuleInit {
             }
         }
 
-        if (!this.chatSession) {
+        const chatSession = this.getOrCreateSession(sessionId);
+        if (!chatSession) {
             return this.getFallbackResponse(message);
         }
 
         try {
-            this.logger.log(`Sending message to Gemini: ${message}`);
-            const result = await this.chatSession.sendMessage(message);
+            this.logger.log(`Sending message to Gemini (session: ${sessionId}): ${message}`);
+            const result = await chatSession.sendMessage(message);
             const response = result.response.text();
             this.logger.log(`Gemini response received: ${response.substring(0, 100)}...`);
             return response;

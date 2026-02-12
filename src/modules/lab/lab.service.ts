@@ -1,30 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { KhanzaService } from '../../infra/database/khanza.service';
+import { LabService as KhanzaLabService } from '../../infra/database/khanza/sync/lab.service';
 
 @Injectable()
 export class LabService {
     private readonly logger = new Logger(LabService.name);
 
-    constructor(private readonly khanzaService: KhanzaService) { }
+    constructor(private readonly khanzaLabService: KhanzaLabService) { }
 
     async getGuarantors() {
-        return this.khanzaService.getLabGuarantors();
+        return this.khanzaLabService.getGuarantors();
     }
 
     async getTests(kd_pj?: string) {
-        return this.khanzaService.getLabTests(kd_pj);
+        return this.khanzaLabService.getTests(kd_pj);
     }
 
     async getTemplateById(id: number) {
-        return this.khanzaService.getLabTemplateById(id);
+        return this.khanzaLabService.getTemplateById(id);
     }
 
     async getCategories(kd_pj?: string) {
-        return this.khanzaService.getLabCategories(kd_pj);
+        return this.khanzaLabService.getCategories(kd_pj);
     }
 
     async getTestsByCategory(category: string, kd_pj?: string) {
-        const allTests = await this.khanzaService.getLabTests(kd_pj);
+        const allTests = await this.khanzaLabService.getTests(kd_pj);
         return allTests.filter(test => test.category === category);
     }
 }

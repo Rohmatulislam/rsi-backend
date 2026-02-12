@@ -1,32 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { KhanzaDBService } from 'src/infra/database/khanza/khanza-db.service';
 
 @Injectable()
-export class FinanceService {
+export class FinanceService implements OnModuleInit {
     private readonly logger = new Logger(FinanceService.name);
 
-    constructor(private readonly khanzaDB: KhanzaDBService) {
-        this.khanzaDB.db.raw('DESC piutang_pasien').then(res => {
-            this.logger.log('Columns in piutang_pasien: ' + JSON.stringify(res[0].map(c => c.Field)));
-        }).catch(e => {
-            this.logger.warn('piutang_pasien table not found or error: ' + e.message);
-        });
-        this.khanzaDB.db.raw('DESC billing').then(res => {
-            this.logger.log('Columns in billing: ' + JSON.stringify(res[0].map(c => c.Field)));
-        }).catch(e => {
-            this.logger.warn('billing table not found or error: ' + e.message);
-        });
+    constructor(private readonly khanzaDB: KhanzaDBService) { }
 
-        // Debug today's registration counts
-        const todayStr = new Date().toISOString().split('T')[0];
-        this.khanzaDB.db('reg_periksa as reg')
-            .select('pj.png_jawab', this.khanzaDB.db.raw('count(*) as total'))
-            .join('penjab as pj', 'reg.kd_pj', 'pj.kd_pj')
-            .where('reg.tgl_registrasi', todayStr)
-            .groupBy('pj.png_jawab')
-            .then(res => {
-                this.logger.log(`DIAGNOSTIC - Today's registrations: ${JSON.stringify(res)}`);
-            });
+    async onModuleInit() {
+        try {
+            const isConnected = await this.khanzaDB.testConnection();
+            if (isConnected) {
+                this.logger.log('FinanceService connected to Khanza DB.');
+            }
+        } catch (error) {
+            this.logger.warn('FinanceService: Khanza DB not available at startup.');
+        }
     }
 
     async getDrugProfitReport(period: 'daily' | 'monthly' | 'yearly', date?: string, customStart?: string, customEnd?: string) {

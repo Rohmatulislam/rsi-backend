@@ -2,11 +2,12 @@ import 'dotenv/config';
 import { json, urlencoded } from 'express';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { join } from 'path';
 import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
+  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
   });
@@ -43,7 +44,7 @@ async function bootstrap() {
       'https://www.rsisitihajarmataram.co.id',
     ];
 
-  console.log('Allowed Origins:', allowedOrigins);
+  logger.log(`Allowed Origins: ${allowedOrigins.join(', ')}`);
 
   app.enableCors({
     origin: allowedOrigins,
@@ -54,7 +55,7 @@ async function bootstrap() {
 
   const port = process.env.PORT || 2000;
   await app.listen(port, '0.0.0.0');
-  console.log(`🚀 Application is running on: http://0.0.0.0:${port}`);
-  console.log('Finance routes registered: /api/finance-stats/summary, /api/finance-stats/drug-profit, /api/finance-stats/payment-method');
+  logger.log(`🚀 Application is running on: http://0.0.0.0:${port}`);
+  logger.log('Finance routes registered: /api/finance-stats/summary, /api/finance-stats/drug-profit, /api/finance-stats/payment-method');
 }
 bootstrap();
