@@ -11,8 +11,10 @@ export class AccountingController {
     async getDailyJournal(
         @Query('startDate') startDate: string,
         @Query('endDate') endDate: string,
+        @Query('page') page: string = '1',
+        @Query('limit') limit: string = '50',
     ) {
-        return this.accountingService.getDailyJournal(startDate, endDate);
+        return this.accountingService.getDailyJournal(startDate, endDate, Number(page), Number(limit));
     }
 
     @Get('accounts')
@@ -42,5 +44,20 @@ export class AccountingController {
         @Query('endDate') endDate: string,
     ) {
         return this.accountingService.getBalanceSheet(endDate);
+    }
+
+    @Get('cash-flow')
+    async getCashFlowStatement(
+        @Query('startDate') startDate: string,
+        @Query('endDate') endDate: string,
+    ) {
+        return this.accountingService.getCashFlowStatement(startDate, endDate);
+    }
+
+    @Get('opening-equity')
+    async getOpeningEquity(
+        @Query('startDate') startDate: string,
+    ) {
+        return this.accountingService.getOpeningEquity(startDate);
     }
 }

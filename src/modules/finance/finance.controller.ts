@@ -47,4 +47,26 @@ export class FinanceController {
         this.logger.log('GET /finance-stats/trends');
         return this.financeService.getFinancialTrends();
     }
+
+    @Get('expenses')
+    async getExpenseSummary(
+        @Query('period') period: 'daily' | 'monthly' | 'yearly' = 'daily',
+        @Query('date') date?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ) {
+        this.logger.log(`GET /finance-stats/expenses ${JSON.stringify({ period, date, startDate, endDate })}`);
+        return this.financeService.getExpenseSummary(period, date, startDate, endDate);
+    }
+
+    @Get('period-comparison')
+    async getPeriodComparison(
+        @Query('period') period: 'daily' | 'monthly' | 'yearly' = 'monthly',
+        @Query('date') date?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+    ) {
+        this.logger.log(`GET /finance-stats/period-comparison ${JSON.stringify({ period, date, startDate, endDate })}`);
+        return this.financeService.getPeriodComparison(period, date, startDate, endDate);
+    }
 }

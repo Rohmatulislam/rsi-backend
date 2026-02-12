@@ -7,9 +7,33 @@ export class AccountingService {
 
     constructor(private readonly khanzaDB: KhanzaDBService) { }
 
-    async getDailyJournal(startDate: string, endDate: string) {
+    async getDailyJournal(startDate: string, endDate: string, page: number = 1, limit: number = 50) {
         try {
             const db = this.khanzaDB.db;
+            const offset = (page - 1) * limit;
+
+            // Get total count of unique journals
+            const countResult = await db('jurnal as j')
+                .whereBetween('j.tgl_jurnal', [startDate, endDate])
+                .count('* as total')
+                .first();
+            const totalJournals = Number((countResult as any)?.total) || 0;
+
+            // Get paginated journal numbers
+            const journalNumbers = await db('jurnal as j')
+                .select('j.no_jurnal')
+                .whereBetween('j.tgl_jurnal', [startDate, endDate])
+                .orderBy('j.tgl_jurnal', 'asc')
+                .orderBy('j.jam_jurnal', 'asc')
+                .offset(offset)
+                .limit(limit);
+
+            if (journalNumbers.length === 0) {
+                return { data: [], pagination: { page, limit, total: totalJournals, totalPages: Math.ceil(totalJournals / limit) } };
+            }
+
+            const jnos = journalNumbers.map((j: any) => j.no_jurnal);
+
             const results = await db('jurnal as j')
                 .select(
                     'j.no_jurnal',
@@ -24,13 +48,13 @@ export class AccountingService {
                 )
                 .join('detailjurnal as dj', 'j.no_jurnal', 'dj.no_jurnal')
                 .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
-                .whereBetween('j.tgl_jurnal', [startDate, endDate])
+                .whereIn('j.no_jurnal', jnos)
                 .orderBy('j.tgl_jurnal', 'asc')
                 .orderBy('j.jam_jurnal', 'asc')
                 .orderBy('j.no_jurnal', 'asc');
 
-            // Group by no_jurnal for better frontend display
-            const grouped = results.reduce((acc, curr) => {
+            // Group by no_jurnal
+            const grouped = results.reduce((acc: any, curr: any) => {
                 if (!acc[curr.no_jurnal]) {
                     acc[curr.no_jurnal] = {
                         no_jurnal: curr.no_jurnal,
@@ -50,7 +74,15 @@ export class AccountingService {
                 return acc;
             }, {});
 
-            return Object.values(grouped);
+            return {
+                data: Object.values(grouped),
+                pagination: {
+                    page,
+                    limit,
+                    total: totalJournals,
+                    totalPages: Math.ceil(totalJournals / limit)
+                }
+            };
         } catch (error) {
             this.logger.error('Error fetching daily journal', error);
             throw error;
@@ -61,26 +93,31 @@ export class AccountingService {
         try {
             const db = this.khanzaDB.db;
 
+            // Get account info
+            const accountInfo = await db('rekening')
+                .where('kd_rek', kd_rek)
+                .select('kd_rek', 'nm_rek', 'tipe', 'balance')
+                .first();
+
+            const balanceType = (accountInfo as any)?.balance || 'D';
+
             // Get initial balance before startDate
             const initialBalance = await db('detailjurnal as dj')
                 .join('jurnal as j', 'dj.no_jurnal', 'j.no_jurnal')
-                .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
                 .select(
                     db.raw('SUM(dj.debet) as total_debet'),
                     db.raw('SUM(dj.kredit) as total_kredit'),
-                    'r.balance'
                 )
                 .where('dj.kd_rek', kd_rek)
                 .where('j.tgl_jurnal', '<', startDate)
-                .groupBy('r.balance')
                 .first();
 
-            let balance = 0;
+            let openingBalance = 0;
             if (initialBalance) {
-                if (initialBalance.balance === 'D') {
-                    balance = (initialBalance.total_debet || 0) - (initialBalance.total_kredit || 0);
+                if (balanceType === 'D') {
+                    openingBalance = ((initialBalance as any).total_debet || 0) - ((initialBalance as any).total_kredit || 0);
                 } else {
-                    balance = (initialBalance.total_kredit || 0) - (initialBalance.total_debet || 0);
+                    openingBalance = ((initialBalance as any).total_kredit || 0) - ((initialBalance as any).total_debet || 0);
                 }
             }
 
@@ -99,21 +136,32 @@ export class AccountingService {
                 .orderBy('j.tgl_jurnal', 'asc')
                 .orderBy('j.jam_jurnal', 'asc');
 
-            const result = entries.map(entry => {
-                const rowDebet = entry.debet || 0;
-                const rowKredit = entry.kredit || 0;
-
-                // Assuming we need to know the account balance type to calculate running balance correctly
-                // For simplicity, we'll return debet/kredit and let frontend handle the specific ledger view
+            // Calculate running balance
+            let runningBalance = openingBalance;
+            const entriesWithBalance = entries.map((entry: any) => {
+                const debet = Number(entry.debet) || 0;
+                const kredit = Number(entry.kredit) || 0;
+                if (balanceType === 'D') {
+                    runningBalance += debet - kredit;
+                } else {
+                    runningBalance += kredit - debet;
+                }
                 return {
-                    ...entry,
-                    current_balance: balance // This is just the starting, not real running balance yet
+                    tgl_jurnal: entry.tgl_jurnal,
+                    no_jurnal: entry.no_jurnal,
+                    no_bukti: entry.no_bukti,
+                    keterangan: entry.keterangan,
+                    debet,
+                    kredit,
+                    saldo: runningBalance
                 };
             });
 
             return {
-                initial_balance: balance,
-                entries: entries
+                account: accountInfo || { kd_rek, nm_rek: '-', tipe: '-', balance: 'D' },
+                initial_balance: openingBalance,
+                closing_balance: runningBalance,
+                entries: entriesWithBalance
             };
         } catch (error) {
             this.logger.error('Error fetching general ledger', error);
@@ -129,8 +177,6 @@ export class AccountingService {
         try {
             const db = this.khanzaDB.db;
 
-            // Tipe 'R' is for Rugi Laba
-            // Usually: 4=Pendapatan, 5=Beban, 6=Beban Lainnya
             const accounts = await db('rekening as r')
                 .leftJoin(db.raw('(SELECT dj.kd_rek, SUM(dj.debet) as total_debet, SUM(dj.kredit) as total_kredit FROM detailjurnal dj JOIN jurnal j ON dj.no_jurnal = j.no_jurnal WHERE j.tgl_jurnal BETWEEN ? AND ? GROUP BY dj.kd_rek) as flows', [startDate, endDate]), 'r.kd_rek', 'flows.kd_rek')
                 .select(
@@ -144,7 +190,7 @@ export class AccountingService {
                 .where('r.tipe', 'R')
                 .orderBy('r.kd_rek', 'asc');
 
-            return accounts.map(acc => {
+            return accounts.map((acc: any) => {
                 let amount = 0;
                 if (acc.balance === 'D') {
                     amount = acc.debet - acc.kredit;
@@ -168,8 +214,6 @@ export class AccountingService {
         try {
             const db = this.khanzaDB.db;
 
-            // Tipe 'N' is for Neraca
-            // Usually: 1=Aset, 2=Kewajiban, 3=Modal
             const accounts = await db('rekening as r')
                 .leftJoin(db.raw('(SELECT dj.kd_rek, SUM(dj.debet) as total_debet, SUM(dj.kredit) as total_kredit FROM detailjurnal dj JOIN jurnal j ON dj.no_jurnal = j.no_jurnal WHERE j.tgl_jurnal <= ? GROUP BY dj.kd_rek) as balances', [endDate]), 'r.kd_rek', 'balances.kd_rek')
                 .select(
@@ -183,7 +227,7 @@ export class AccountingService {
                 .whereIn('r.tipe', ['N', 'M'])
                 .orderBy('r.kd_rek', 'asc');
 
-            return accounts.map(acc => {
+            return accounts.map((acc: any) => {
                 let amount = 0;
                 if (acc.balance === 'D') {
                     amount = acc.debet - acc.kredit;
@@ -206,6 +250,121 @@ export class AccountingService {
         } catch (error) {
             this.logger.error('Error calculating balance sheet', error);
             throw error;
+        }
+    }
+
+    async getCashFlowStatement(startDate: string, endDate: string) {
+        try {
+            const db = this.khanzaDB.db;
+
+            // Cash flow from operations: revenue receipts minus operational expenses
+            // Using kas/bank accounts (typically prefix 1.1) and linking to journal entries
+            const operatingInflows = await db('detailjurnal as dj')
+                .join('jurnal as j', 'dj.no_jurnal', 'j.no_jurnal')
+                .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
+                .whereBetween('j.tgl_jurnal', [startDate, endDate])
+                .where('r.kd_rek', 'like', '4%') // Revenue accounts
+                .select(db.raw('SUM(CASE WHEN r.balance = "K" THEN dj.kredit - dj.debet ELSE dj.debet - dj.kredit END) as total'))
+                .first();
+
+            const operatingOutflows = await db('detailjurnal as dj')
+                .join('jurnal as j', 'dj.no_jurnal', 'j.no_jurnal')
+                .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
+                .whereBetween('j.tgl_jurnal', [startDate, endDate])
+                .where(function () {
+                    this.where('r.kd_rek', 'like', '5%').orWhere('r.kd_rek', 'like', '6%');
+                })
+                .select(db.raw('SUM(CASE WHEN r.balance = "D" THEN dj.debet - dj.kredit ELSE dj.kredit - dj.debet END) as total'))
+                .first();
+
+            // Cash flow from investing: fixed assets (typically prefix 1.2 or 1.3)
+            const investingCashFlow = await db('detailjurnal as dj')
+                .join('jurnal as j', 'dj.no_jurnal', 'j.no_jurnal')
+                .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
+                .whereBetween('j.tgl_jurnal', [startDate, endDate])
+                .where(function () {
+                    this.where('r.kd_rek', 'like', '1.2%')
+                        .orWhere('r.kd_rek', 'like', '1.3%')
+                        .orWhere('r.kd_rek', 'like', '1.4%')
+                        .orWhere('r.kd_rek', 'like', '1.5%');
+                })
+                .select(db.raw('SUM(dj.kredit - dj.debet) as total'))
+                .first();
+
+            // Cash flow from financing: debt / equity (prefix 2 and 3)
+            const financingCashFlow = await db('detailjurnal as dj')
+                .join('jurnal as j', 'dj.no_jurnal', 'j.no_jurnal')
+                .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
+                .whereBetween('j.tgl_jurnal', [startDate, endDate])
+                .where(function () {
+                    this.where('r.kd_rek', 'like', '2%').orWhere('r.kd_rek', 'like', '3%');
+                })
+                .select(db.raw('SUM(CASE WHEN r.balance = "K" THEN dj.kredit - dj.debet ELSE dj.debet - dj.kredit END) as total'))
+                .first();
+
+            // Get cash opening balance (kas & bank, typically 1.1.x)
+            const cashOpening = await db('detailjurnal as dj')
+                .join('jurnal as j', 'dj.no_jurnal', 'j.no_jurnal')
+                .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
+                .where('j.tgl_jurnal', '<', startDate)
+                .where('r.kd_rek', 'like', '1.1%')
+                .select(db.raw('SUM(dj.debet - dj.kredit) as total'))
+                .first();
+
+            const operasi = (Number((operatingInflows as any)?.total) || 0) - (Number((operatingOutflows as any)?.total) || 0);
+            const investasi = Number((investingCashFlow as any)?.total) || 0;
+            const pendanaan = Number((financingCashFlow as any)?.total) || 0;
+            const saldoAwal = Number((cashOpening as any)?.total) || 0;
+
+            return {
+                operating: {
+                    inflows: Number((operatingInflows as any)?.total) || 0,
+                    outflows: Number((operatingOutflows as any)?.total) || 0,
+                    net: operasi
+                },
+                investing: {
+                    net: investasi
+                },
+                financing: {
+                    net: pendanaan
+                },
+                openingCash: saldoAwal,
+                netChange: operasi + investasi + pendanaan,
+                closingCash: saldoAwal + operasi + investasi + pendanaan
+            };
+        } catch (error) {
+            this.logger.error('Error calculating cash flow statement', error);
+            return {
+                operating: { inflows: 0, outflows: 0, net: 0 },
+                investing: { net: 0 },
+                financing: { net: 0 },
+                openingCash: 0,
+                netChange: 0,
+                closingCash: 0
+            };
+        }
+    }
+
+    async getOpeningEquity(startDate: string) {
+        try {
+            const db = this.khanzaDB.db;
+
+            const result = await db('detailjurnal as dj')
+                .join('jurnal as j', 'dj.no_jurnal', 'j.no_jurnal')
+                .join('rekening as r', 'dj.kd_rek', 'r.kd_rek')
+                .where('j.tgl_jurnal', '<', startDate)
+                .where('r.kd_rek', 'like', '3%')
+                .select(
+                    db.raw('SUM(CASE WHEN r.balance = "K" THEN dj.kredit - dj.debet ELSE dj.debet - dj.kredit END) as total')
+                )
+                .first();
+
+            return {
+                openingEquity: Number((result as any)?.total) || 0
+            };
+        } catch (error) {
+            this.logger.error('Error calculating opening equity', error);
+            return { openingEquity: 0 };
         }
     }
 }
