@@ -11,6 +11,8 @@ import { getTodayFormatted } from 'src/infra/utils/date.utils';
 
 import { Cron, CronExpression } from '@nestjs/schedule';
 
+import { AppointmentSyncService } from '../appointment/appointment-sync.service';
+
 @Injectable()
 export class DoctorService {
   private isSyncing = false;
@@ -21,6 +23,7 @@ export class DoctorService {
     private readonly khanzaService: KhanzaService,
     private readonly fileUploadService: FileUploadService,
     private readonly notificationService: NotificationService,
+    private readonly appointmentSync: AppointmentSyncService,
   ) { }
 
   async create(createDoctorDto: CreateDoctorDto) {
@@ -303,9 +306,15 @@ export class DoctorService {
 
           // 3. Upsert Schedules
           const docSchedules = kSchedules.filter(s => s.kd_dokter === doc.kd_dokter);
-          await this.prisma.schedule.deleteMany({ where: { doctorId: savedDoctor.id } });
+
+          // Get existing schedules for comparison
+          const existingSchedules = await this.prisma.schedule.findMany({
+            where: { doctorId: savedDoctor.id }
+          });
 
           const schedulesToCreate = [];
+          const changedSchedules = []; // Track days that changed for notifications
+
           for (const sched of docSchedules) {
             const daysMap: { [key: string]: number } = {
               'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
@@ -313,12 +322,23 @@ export class DoctorService {
             const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
 
             if (dayInt >= 0) {
-              schedulesToCreate.push({
+              const scheduleData = {
                 doctorId: savedDoctor.id,
                 dayOfWeek: dayInt,
                 startTime: sched.jam_mulai,
                 endTime: sched.jam_selesai,
-              });
+                kd_poli: sched.kd_poli
+              };
+
+              schedulesToCreate.push(scheduleData);
+
+              // Check if modification occurred (different time or different poli for same day)
+              const existingOnDay = existingSchedules.find((es: any) => es.dayOfWeek === dayInt && (es.kd_poli === sched.kd_poli || !es.kd_poli));
+              if (existingOnDay) {
+                if ((existingOnDay as any).startTime !== sched.jam_mulai || (existingOnDay as any).endTime !== sched.jam_selesai) {
+                  changedSchedules.push({ dayOfWeek: dayInt, kd_poli: sched.kd_poli, type: 'modified' });
+                }
+              }
 
               // 4. Link to Category (Poli)
               const poli = kPolis.find(p => p.kd_poli === sched.kd_poli);
@@ -351,8 +371,32 @@ export class DoctorService {
             }
           }
 
+          // Detect deleted schedules
+          for (const es of existingSchedules) {
+            const stillExists = docSchedules.some(ns => {
+              const daysMap: { [key: string]: number } = {
+                'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
+              };
+              return daysMap[ns.hari_kerja.toUpperCase()] === (es as any).dayOfWeek && (ns.kd_poli === (es as any).kd_poli || !(es as any).kd_poli);
+            });
+            if (!stillExists) {
+              changedSchedules.push({ dayOfWeek: (es as any).dayOfWeek, kd_poli: (es as any).kd_poli, type: 'deleted' });
+            }
+          }
+
+          // Update DB - Delete all then recreate is simplest but we lose IDs (ok for sync)
+          await this.prisma.schedule.deleteMany({ where: { doctorId: savedDoctor.id } });
           if (schedulesToCreate.length > 0) {
             await this.prisma.schedule.createMany({ data: schedulesToCreate });
+          }
+
+          // Trigger notifications if changes detected
+          if (changedSchedules.length > 0) {
+            this.logger.log(`📢 Detected ${changedSchedules.length} schedule changes for ${doc.nm_dokter}. Triggering notifications...`);
+            // Run in background
+            this.handleScheduleChangeNotifications(savedDoctor.id, doc.kd_dokter, doc.nm_dokter, changedSchedules).catch(err => {
+              this.logger.error(`Error sending schedule change notifications for ${doc.kd_dokter}`, err);
+            });
           }
 
           syncedCount++;
@@ -1089,6 +1133,7 @@ export class DoctorService {
               dayOfWeek: true,
               startTime: true,
               endTime: true,
+              kd_poli: true,
             }
           },
           categories: {
@@ -1131,5 +1176,62 @@ export class DoctorService {
     }
 
     return doctor;
+  }
+
+  private async handleScheduleChangeNotifications(doctorId: string, doctorCode: string, doctorName: string, changes: any[]) {
+    this.logger.log(`📢 [SCHEDULE_CHANGE] Start processing ${changes.length} changes for ${doctorName}`);
+
+    // Fetch future registrations from Khanza first to catch offline patients (desk)
+    try {
+      await this.appointmentSync.syncAllFutureRegistrations(doctorCode);
+    } catch (err) {
+      this.logger.error(`Failed to sync registrations before notifications for ${doctorCode}: ${err.message}`);
+    }
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const change of changes) {
+      // Find all scheduled appointments for this doctor and poli
+      const appointments = await this.prisma.appointment.findMany({
+        where: {
+          doctorId: doctorId,
+          poliCode: change.kd_poli,
+          status: 'scheduled',
+          appointmentDate: { gte: today }
+        } as any
+      });
+
+      // Filter by dayOfWeek
+      const affected = appointments.filter(appt => appt.appointmentDate.getDay() === change.dayOfWeek);
+
+      this.logger.log(`📢 [SCHEDULE_CHANGE] Notifying ${affected.length} patients for dayOfWeek ${change.dayOfWeek} (${change.type})`);
+
+      for (const appt of affected) {
+        if (!appt.patientPhone) continue;
+
+        try {
+          const daysNames = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+          const dayName = daysNames[change.dayOfWeek];
+
+          // Fetch new schedule details for the message info
+          const newSchedule = await this.prisma.schedule.findFirst({
+            where: { doctorId, dayOfWeek: change.dayOfWeek, kd_poli: change.kd_poli } as any
+          });
+
+          await this.notificationService.sendScheduleChangeNotification({
+            patientName: appt.patientName || 'Pasien',
+            patientPhone: appt.patientPhone,
+            doctorName: doctorName,
+            dayName: dayName,
+            newTime: newSchedule ? `${newSchedule.startTime} - ${newSchedule.endTime}` : '-',
+            poliName: (appt as any).poliCode || 'Poliklinik',
+            type: change.type
+          }, appt.id);
+        } catch (err) {
+          this.logger.error(`Failed to notify patient ${appt.patientName} (${appt.id}) about schedule change: ${err.message}`);
+        }
+      }
+    }
   }
 }

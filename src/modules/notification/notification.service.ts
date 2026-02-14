@@ -337,6 +337,36 @@ export class NotificationService {
     this.logger.log(`Booking reminder ${sent ? 'sent' : 'logged'} for ${patientName}`);
   }
 
+  async sendScheduleChangeNotification(payload: any, appointmentId?: string): Promise<{ whatsapp: boolean }> {
+    const { patientName, patientPhone, doctorName, dayName, newTime, poliName, type } = payload;
+
+    const message = this.generateScheduleChangeMessage({
+      patientName,
+      doctorName,
+      dayName,
+      newTime,
+      poliName,
+      type
+    });
+
+    const sent = await this.sendWhatsApp(patientPhone, message);
+
+    // Log the notification
+    await this.prisma.notification.create({
+      data: {
+        type: 'SCHEDULE_CHANGE_NOTICE',
+        recipient: patientName,
+        recipientContact: this.formatPhoneNumber(patientPhone),
+        message: `Schedule change notice for ${patientName} - Doctor: ${doctorName}`,
+        status: sent ? 'sent' : 'failed',
+        ...(appointmentId && { appointmentId })
+      }
+    });
+
+    this.logger.log(`📢 [SCHEDULE_CHANGE] Notification ${sent ? 'sent' : 'failed'} for ${patientName}`);
+    return { whatsapp: sent };
+  }
+
   // Message Templates
   private generateBookingConfirmationMessage(payload: Partial<NotificationPayload>): string {
     const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
@@ -419,6 +449,33 @@ Harap datang 30 menit sebelum jadwal baru.
 Terima kasih. 🙏
 
 _Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
+  }
+
+  private generateScheduleChangeMessage(payload: any): string {
+    const { patientName, doctorName, dayName, newTime, poliName, type } = payload;
+
+    let changeText = `terdapat perubahan jam praktek`;
+    if (type === 'deleted') {
+      changeText = `jadwal praktek ditiadakan/dihapus`;
+    }
+
+    return `🏥 *RSI Siti Hajar Mataram*
+━━━━━━━━━━━━━━━━━
+📢 *PENGUMUMAN PERUBAHAN JADWAL*
+━━━━━━━━━━━━━━━━━
+
+Halo *${patientName}*,
+
+Kami menginformasikan bahwa untuk hari *${dayName}*, ${changeText} untuk:
+
+• Dokter: *${doctorName}*
+• Poli: *${poliName}*
+${type === 'modified' ? `• Jam Baru: *${newTime}* WIB` : ''}
+
+Mohon maaf atas ketidaknyamanannya. Jika Anda ingin melakukan pendaftaran ulang atau konsultasi lebih lanjut, silakan hubungi kami atau cek jadwal terbaru di website.
+
+Terima kasih. 🙏
+_Pesan otomatis RSI Siti Hajar_`;
   }
 
   private generateReminderMessage(payload: Partial<NotificationPayload>): string {

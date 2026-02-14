@@ -238,6 +238,301 @@ export class FinanceService implements OnModuleInit {
         }
     }
 
+    private readonly TREATMENT_REGISTRY: any[] = [
+        { table: 'rawat_jl_dr', type: 'ralan', performer: 'dr', cat: 'ralan', master: 'jns_perawatan' },
+        { table: 'rawat_jl_pr', type: 'ralan', performer: 'pr', cat: 'ralan', master: 'jns_perawatan' },
+        { table: 'rawat_jl_drpr', type: 'ralan', performer: 'drpr', cat: 'ralan', master: 'jns_perawatan' },
+        { table: 'rawat_inap_dr', type: 'ranap', performer: 'dr', cat: 'ranap', master: 'jns_perawatan_inap' },
+        { table: 'rawat_inap_pr', type: 'ranap', performer: 'pr', cat: 'ranap', master: 'jns_perawatan_inap' },
+        { table: 'rawat_inap_drpr', type: 'ranap', performer: 'drpr', cat: 'ranap', master: 'jns_perawatan_inap' },
+        {
+            table: 'operasi', type: 'ranap', performer: 'special', cat: 'operasi', master: 'paket_operasi',
+            code: 't.kode_paket', masterCode: 'jns.kode_paket', date: 't.tgl_operasi',
+            time: 'DATE_FORMAT(t.tgl_operasi, "%H:%i:%s")', cost: 'operasi'
+        },
+        { table: 'periksa_radiologi', type: 'both', performer: 'special', cat: 'radiologi', master: 'jns_perawatan_radiologi', date: 't.tgl_periksa', time: 't.jam' },
+        { table: 'periksa_lab', type: 'both', performer: 'special', cat: 'laborat', master: 'jns_perawatan_lab', date: 't.tgl_periksa', time: 't.jam' },
+        { table: 'periksa_utd', type: 'both', performer: 'special', cat: 'utd', master: 'jns_perawatan_utd', date: 't.tgl_periksa', time: 't.jam' },
+        {
+            table: 'detail_periksa_lab', type: 'both', performer: 'special', cat: 'laborat', master: 'template_laboratorium',
+            name: 'jns.Pemeriksaan', date: 't.tgl_periksa', time: 't.jam', cost: 'detail_periksa_lab'
+        },
+        { table: 'detail_pemberian_obat', type: 'custom', performer: 'custom', cat: 'farmasi' },
+        { table: 'tambahan_biaya', type: 'custom', performer: 'custom', cat: 'tambahan' },
+        { table: 'pengurangan_biaya', type: 'custom', performer: 'custom', cat: 'potongan' }
+    ];
+
+    async getTreatmentDetailReport(params: {
+        period: string,
+        date?: string,
+        startDate?: string,
+        endDate?: string,
+        search?: string,
+        category?: string,
+        limit?: number,
+        offset?: number
+    }) {
+        try {
+            const { startDate, endDate } = this.getDateRange(params.period, params.date, params.startDate, params.endDate);
+            const category = params.category || 'all';
+            this.logger.log(`Fetching treatment details for range: ${startDate} to ${endDate} (category: ${category}, search: ${params.search})`);
+            const db = this.khanzaDB.db;
+            const limit = params.limit || 100;
+            const offset = params.offset || 0;
+
+            const getQueryFromConfig = (config: any) => {
+                const { table, type, performer, cat, master, code, masterCode, name, date, time, cost } = config;
+
+                // Handle Custom: Farmasi
+                if (cat === 'farmasi') {
+                    return db('detail_pemberian_obat as t')
+                        .join('reg_periksa as reg', 't.no_rawat', 'reg.no_rawat')
+                        .join('pasien as p', 'reg.no_rkm_medis', 'p.no_rkm_medis')
+                        .join('penjab as pj', 'reg.kd_pj', 'pj.kd_pj')
+                        .join('databarang as jns', 't.kode_brng', 'jns.kode_brng')
+                        .select(
+                            db.raw('jns.nama_brng as nm_perawatan'),
+                            db.raw('CASE WHEN t.status = "Ralan" THEN "Farmasi Ralan" ELSE "Farmasi Ranap" END as unitName'),
+                            db.raw('NULL as performerName'), db.raw('NULL as secondaryPerformerName'),
+                            't.no_rawat', 'reg.no_rkm_medis', 'p.nm_pasien',
+                            db.raw('t.kode_brng as kd_jenis_prw'),
+                            db.raw('t.tgl_perawatan as tgl_perawatan'), db.raw('t.jam as jam_rawat'),
+                            'pj.png_jawab as caraBayar',
+                            db.raw('0 as jasaSarana'), db.raw('0 as paketBHP'),
+                            db.raw('0 as jmDokter'), db.raw('0 as jmPetugas'),
+                            db.raw('0 as kso'), db.raw('0 as menejemen'),
+                            db.raw('t.biaya_obat as biaya_obat'),
+                            db.raw('t.jml as jml'),
+                            db.raw('t.embalase as embalase'),
+                            db.raw('t.tuslah as tuslah'),
+                            't.total as total', db.raw("'farmasi' as source")
+                        ).where(db.raw(`DATE(t.tgl_perawatan)`), 'between', [startDate, endDate])
+                        .modify((q) => {
+                            if (params.search) q.where(function () {
+                                this.where('p.nm_pasien', 'like', `%${params.search}%`).orWhere('reg.no_rkm_medis', 'like', `%${params.search}%`)
+                                    .orWhere('t.no_rawat', 'like', `%${params.search}%`).orWhere('jns.nama_brng', 'like', `%${params.search}%`);
+                            });
+                        });
+                }
+
+                // Handle Custom: Tambahan/Potongan
+                if (cat === 'tambahan' || cat === 'potongan') {
+                    const nameCol = cat === 'tambahan' ? 'nama_biaya' : 'nama_pengurangan';
+                    const priceCol = cat === 'tambahan' ? 'besar_biaya' : 'besar_pengurangan';
+                    return db(table + ' as t')
+                        .join('reg_periksa as reg', 't.no_rawat', 'reg.no_rawat')
+                        .join('pasien as p', 'reg.no_rkm_medis', 'p.no_rkm_medis')
+                        .join('penjab as pj', 'reg.kd_pj', 'pj.kd_pj')
+                        .select(
+                            db.raw(`t.${nameCol} as nm_perawatan`), db.raw(`'${cat.toUpperCase()}' as unitName`),
+                            db.raw('NULL as performerName'), db.raw('NULL as secondaryPerformerName'),
+                            't.no_rawat', 'reg.no_rkm_medis', 'p.nm_pasien',
+                            db.raw(`'${cat.toUpperCase()}' as kd_jenis_prw`),
+                            db.raw('reg.tgl_registrasi as tgl_perawatan'), db.raw("'00:00:00' as jam_rawat"),
+                            'pj.png_jawab as caraBayar',
+                            db.raw('0 as jasaSarana'), db.raw('0 as paketBHP'),
+                            db.raw('0 as jmDokter'), db.raw('0 as jmPetugas'),
+                            db.raw('0 as kso'), db.raw('0 as menejemen'),
+                            db.raw('NULL as biaya_obat'), db.raw('NULL as jml'),
+                            db.raw('NULL as embalase'), db.raw('NULL as tuslah'),
+                            db.raw(`t.${priceCol} ${cat === 'potongan' ? '* -1' : ''} as total`),
+                            db.raw(`'${cat}' as source`)
+                        ).whereBetween('reg.tgl_registrasi', [startDate, endDate])
+                        .modify((q) => {
+                            if (params.search) q.where(function () {
+                                this.where('p.nm_pasien', 'like', `%${params.search}%`).orWhere('reg.no_rkm_medis', 'like', `%${params.search}%`)
+                                    .orWhere('t.no_rawat', 'like', `%${params.search}%`).orWhere(`${cat === 'tambahan' ? 't.nama_biaya' : 't.nama_pengurangan'}`, 'like', `%${params.search}%`);
+                            });
+                        });
+                }
+
+                // General Treatment Handler
+                const q = db(table + ' as t')
+                    .join('reg_periksa as reg', 't.no_rawat', 'reg.no_rawat')
+                    .join('pasien as p', 'reg.no_rkm_medis', 'p.no_rkm_medis')
+                    .join('penjab as pj', 'reg.kd_pj', 'pj.kd_pj');
+
+                // Master Join
+                const tCode = code || 't.kd_jenis_prw';
+                const mCode = masterCode || 'jns.kd_jenis_prw';
+                const mName = name || 'jns.nm_perawatan';
+                q.leftJoin(`${master} as jns`, tCode, mCode)
+                    .select(db.raw(`COALESCE(${mName}, "Tindakan") as nm_perawatan`));
+
+                // Unit/Location Join
+                if (type === 'ralan') {
+                    q.leftJoin('poliklinik as pol', 'reg.kd_poli', 'pol.kd_poli')
+                        .select(db.raw('COALESCE(pol.nm_poli, "Ralan") as unitName'));
+                } else if (type === 'ranap') {
+                    q.leftJoin('kamar_inap as ki', 'reg.no_rawat', 'ki.no_rawat')
+                        .leftJoin('kamar as km', 'ki.kd_kamar', 'km.kd_kamar')
+                        .leftJoin('bangsal as b', 'km.kd_bangsal', 'b.kd_bangsal')
+                        .select(db.raw('COALESCE(b.nm_bangsal, "Ranap") as unitName'));
+                } else {
+                    q.select(db.raw('CASE WHEN reg.kd_poli != "-" THEN "Penunjang Ralan" ELSE "Penunjang Ranap" END as unitName'));
+                }
+
+                // Performers Join
+                if (performer === 'dr') {
+                    q.leftJoin('dokter as d', 't.kd_dokter', 'd.kd_dokter').select(db.raw('COALESCE(d.nm_dokter, "-") as performerName'), db.raw('NULL as secondaryPerformerName'));
+                } else if (performer === 'pr') {
+                    q.leftJoin('petugas as pt', 't.nip', 'pt.nip').select(db.raw('COALESCE(pt.nama, "-") as performerName'), db.raw('NULL as secondaryPerformerName'));
+                } else if (performer === 'drpr') {
+                    q.leftJoin('dokter as d', 't.kd_dokter', 'd.kd_dokter').leftJoin('petugas as pt', 't.nip', 'pt.nip')
+                        .select(db.raw('COALESCE(d.nm_dokter, "-") as performerName'), db.raw('COALESCE(pt.nama, "-") as secondaryPerformerName'));
+                } else if (performer === 'special') {
+                    if (table === 'operasi') {
+                        q.leftJoin('dokter as d', 't.operator1', 'd.kd_dokter').select(db.raw('COALESCE(d.nm_dokter, "-") as performerName'), db.raw('NULL as secondaryPerformerName'));
+                    } else if (table === 'periksa_radiologi' || table === 'periksa_lab' || table === 'periksa_utd') {
+                        q.leftJoin('dokter as d', 't.kd_dokter', 'd.kd_dokter').leftJoin('petugas as pt', 't.nip', 'pt.nip')
+                            .select(db.raw('COALESCE(d.nm_dokter, "-") as performerName'), db.raw('COALESCE(pt.nama, "-") as secondaryPerformerName'));
+                    } else if (table === 'detail_periksa_lab') {
+                        q.leftJoin('periksa_lab as pl', function () {
+                            this.on('t.no_rawat', '=', 'pl.no_rawat').andOn('t.kd_jenis_prw', '=', 'pl.kd_jenis_prw').andOn('t.tgl_periksa', '=', 'pl.tgl_periksa').andOn('t.jam', '=', 'pl.jam')
+                        }).leftJoin('dokter as d', 'pl.kd_dokter', 'd.kd_dokter').leftJoin('petugas as pt', 'pl.nip', 'pt.nip')
+                            .select(db.raw('COALESCE(d.nm_dokter, "-") as performerName'), db.raw('COALESCE(pt.nama, "-") as secondaryPerformerName'));
+                    }
+                }
+
+                // Dates & Costs Mapping
+                const dF = date || 't.tgl_perawatan';
+                const tF = time || 't.jam_rawat';
+                let sarana = ['periksa_radiologi', 'periksa_lab', 'detail_periksa_lab', 'periksa_utd', 'operasi'].includes(table) ? 't.bagian_rs' : 't.material';
+                let bhp = 't.bhp', kso = 't.kso', mnj = 't.menejemen', dr = '0', pr = '0', tot: any = 't.biaya_rawat';
+
+                if (table === 'operasi') {
+                    bhp = kso = mnj = '0'; dr = 't.biayaoperator1'; pr = 't.biayabidan';
+                    tot = db.raw(`(COALESCE(t.biayaoperator1,0) + COALESCE(t.biayaoperator2,0) + COALESCE(t.biayaoperator3,0) + COALESCE(t.biayaasisten_operator1,0) + COALESCE(t.biayaasisten_operator2,0) + COALESCE(t.biayaasisten_operator3,0) + COALESCE(t.biayainstrumen,0) + COALESCE(t.biayadokter_anak,0) + COALESCE(t.biayaperawaat_resusitas,0) + COALESCE(t.biayadokter_anestesi,0) + COALESCE(t.biayaasisten_anestesi,0) + COALESCE(t.biayaasisten_anestesi2,0) + COALESCE(t.biayabidan,0) + COALESCE(t.biayabidan2,0) + COALESCE(t.biayabidan3,0) + COALESCE(t.biayaperawat_luar,0) + COALESCE(t.biayaalat,0) + COALESCE(t.biayasewaok,0) + COALESCE(t.akomodasi,0) + COALESCE(t.bagian_rs,0) + COALESCE(t.biaya_omloop,0) + COALESCE(t.biaya_omloop2,0) + COALESCE(t.biaya_omloop3,0) + COALESCE(t.biaya_omloop4,0) + COALESCE(t.biaya_omloop5,0) + COALESCE(t.biayasarpras,0) + COALESCE(t.biaya_dokter_pjanak,0) + COALESCE(t.biaya_dokter_umum,0))`);
+                } else if (table === 'detail_periksa_lab') {
+                    dr = 't.bagian_dokter'; pr = 't.bagian_laborat'; tot = 't.biaya_item';
+                } else if (table === 'periksa_radiologi' || table === 'periksa_lab' || table === 'periksa_utd') {
+                    dr = 't.tarif_tindakan_dokter'; pr = 't.tarif_tindakan_petugas'; tot = 't.biaya';
+                } else {
+                    if (performer === 'dr') dr = 't.tarif_tindakandr';
+                    else if (performer === 'pr') pr = 't.tarif_tindakanpr';
+                    else if (performer === 'drpr') { dr = 't.tarif_tindakandr'; pr = 't.tarif_tindakanpr'; }
+                }
+
+                return q.select(
+                    't.no_rawat', 'reg.no_rkm_medis', 'p.nm_pasien',
+                    db.raw(`${tCode} as kd_jenis_prw`), db.raw(`${dF} as tgl_perawatan`), db.raw(`${typeof tF === 'string' ? tF : tF.toString()} as jam_rawat`),
+                    'pj.png_jawab as caraBayar', db.raw(`COALESCE(${sarana}, 0) as jasaSarana`),
+                    db.raw(`COALESCE(${bhp}, 0) as paketBHP`), db.raw(`COALESCE(${dr}, 0) as jmDokter`),
+                    db.raw(`COALESCE(${pr}, 0) as jmPetugas`), db.raw(`COALESCE(${kso}, 0) as kso`),
+                    db.raw(`COALESCE(${mnj}, 0) as menejemen`),
+                    db.raw('NULL as biaya_obat'), db.raw('NULL as jml'),
+                    db.raw('NULL as embalase'), db.raw('NULL as tuslah'),
+                    db.raw(`${tot} as total`), db.raw(`'${table}' as source`)
+                ).where(db.raw(`DATE(${dF})`), 'between', [startDate, endDate])
+                    .modify((q) => {
+                        if (params.search) q.where(function () {
+                            this.where('p.nm_pasien', 'like', `%${params.search}%`)
+                                .orWhere('reg.no_rkm_medis', 'like', `%${params.search}%`)
+                                .orWhere('t.no_rawat', 'like', `%${params.search}%`)
+                                .orWhere(mName, 'like', `%${params.search}%`);
+                        });
+                    });
+            };
+
+            let filteredConfigs = category === 'all' ? this.TREATMENT_REGISTRY : this.TREATMENT_REGISTRY.filter(c => c.cat === category);
+
+            // Special case for UTD: if cat is empty or standard, include blood-related items from other categories
+            const bloodKeywords = ['DARAH', 'UTD', 'TRANSFUSI', 'KROSCEK', 'CROSSMATCH', 'GOLONGAN'];
+
+            if (category === 'utd') {
+                // If UTD table is empty (common in some installs), we pull from Lab, Ralan, and Ranap where name contains blood keywords
+                const relevantSources = this.TREATMENT_REGISTRY.filter(c =>
+                    ['ralan', 'ranap', 'laborat', 'utd'].includes(c.cat)
+                );
+
+                const queries = relevantSources.map(config => {
+                    const q = getQueryFromConfig(config);
+                    // Add mandatory blood keyword filter for non-utd tables
+                    if (config.cat !== 'utd') {
+                        const mName = config.name || 'jns.nm_perawatan';
+                        q.where(function () {
+                            bloodKeywords.forEach(kw => this.orWhere(mName, 'like', `%${kw}%`));
+                        });
+                    }
+                    return q;
+                });
+
+                const unionQuery = queries[0];
+                if (queries.length > 1) {
+                    queries.slice(1).forEach(q => unionQuery.unionAll(q));
+                }
+
+                const results = await db.select('*').from(unionQuery.as('u'))
+                    .orderBy('tgl_perawatan', 'desc').orderBy('jam_rawat', 'desc')
+                    .limit(limit).offset(offset);
+
+                const countResult = await db.from(unionQuery.as('u')).count('* as total').first();
+                const summaryResult = await db.from(unionQuery.as('u'))
+                    .select(
+                        db.raw('SUM(jasaSarana) as totalSarana'),
+                        db.raw('SUM(paketBHP) as totalBHP'),
+                        db.raw('SUM(jmDokter) as totalDR'),
+                        db.raw('SUM(jmPetugas) as totalPR'),
+                        db.raw('SUM(kso) as totalKSO'),
+                        db.raw('SUM(menejemen) as totalMNJ'),
+                        db.raw('SUM(total) as totalAll')
+                    ).first();
+
+                return this.formatReportResponse(results, countResult, summaryResult, limit, offset);
+            }
+
+            if (filteredConfigs.length === 0) return { data: [], total: 0, limit, offset };
+
+            const unionQuery = getQueryFromConfig(filteredConfigs[0]);
+            if (filteredConfigs.length > 1) {
+                unionQuery.unionAll(filteredConfigs.slice(1).map(c => getQueryFromConfig(c)));
+            }
+
+            const results = await db.select('*').from(unionQuery.as('u'))
+                .orderBy('tgl_perawatan', 'desc').orderBy('jam_rawat', 'desc')
+                .limit(limit).offset(offset);
+
+            const countResult = await db.from(unionQuery.as('u')).count('* as total').first();
+            const summaryResult = await db.from(unionQuery.as('u'))
+                .select(
+                    db.raw('SUM(jasaSarana) as totalSarana'),
+                    db.raw('SUM(paketBHP) as totalBHP'),
+                    db.raw('SUM(jmDokter) as totalDR'),
+                    db.raw('SUM(jmPetugas) as totalPR'),
+                    db.raw('SUM(kso) as totalKSO'),
+                    db.raw('SUM(menejemen) as totalMNJ'),
+                    db.raw('SUM(total) as totalAll')
+                ).first();
+
+            return this.formatReportResponse(results, countResult, summaryResult, limit, offset);
+        } catch (error) {
+            this.logger.error(`Error fetching treatment details: ${error}`);
+            throw error;
+        }
+    }
+
+    private formatReportResponse(results: any[], countResult: any, summaryResult: any, limit: number, offset: number) {
+        return {
+            data: (results as any[]).map(r => ({
+                ...r,
+                jasaSarana: Number(r.jasaSarana), paketBHP: Number(r.paketBHP), jmDokter: Number(r.jmDokter),
+                jmPetugas: Number(r.jmPetugas), kso: Number(r.kso), mnj: Number(r.menejemen),
+                menejemen: Number(r.menejemen), total: Number(r.total)
+            })),
+            total: Number((countResult as any)?.total || 0),
+            summary: {
+                jasaSarana: Number((summaryResult as any)?.totalSarana || 0),
+                paketBHP: Number((summaryResult as any)?.totalBHP || 0),
+                jmDokter: Number((summaryResult as any)?.totalDR || 0),
+                jmPetugas: Number((summaryResult as any)?.totalPR || 0),
+                kso: Number((summaryResult as any)?.totalKSO || 0),
+                menejemen: Number((summaryResult as any)?.totalMNJ || 0),
+                total: Number((summaryResult as any)?.totalAll || 0)
+            },
+            limit, offset
+        };
+    }
+
     async getFinancialTrends() {
         try {
             const db = this.khanzaDB.db;
@@ -407,13 +702,15 @@ export class FinanceService implements OnModuleInit {
             const pctChange = (curr: number, prev: number) => prev > 0 ? Math.round(((curr - prev) / prev) * 1000) / 10 : (curr > 0 ? 100 : 0);
 
             return {
-                revenue: currentData.revenue,
-                expenses: currentData.expenses,
-                drugProfit: currentData.drugProfit,
-                transactions: currentData.transactions,
-                netIncome: currentData.netIncome,
-                startDate: current.startDate,
-                endDate: current.endDate,
+                current: {
+                    revenue: currentData.revenue,
+                    expenses: currentData.expenses,
+                    drugProfit: currentData.drugProfit,
+                    transactions: currentData.transactions,
+                    netIncome: currentData.netIncome,
+                    startDate: current.startDate,
+                    endDate: current.endDate,
+                },
                 previous: {
                     revenue: previousData.revenue,
                     expenses: previousData.expenses,

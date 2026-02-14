@@ -1,13 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { AppointmentService } from '../appointment/appointment.service';
 import { PrismaService } from '../../infra/database/prisma.service';
+import { KhanzaService } from '../../infra/database/khanza.service';
 import { getStartOfTodayWita, formatWitaDate } from '../../infra/utils/date.utils';
+import { AppointmentSyncService } from '../appointment/appointment-sync.service';
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly appointmentService: AppointmentService,
     private readonly prisma: PrismaService,
+    private readonly khanzaService: KhanzaService,
+    private readonly appointmentSync: AppointmentSyncService,
   ) { }
 
   /**
@@ -228,47 +234,120 @@ export class AdminService {
   }
 
   /**
-   * Get appointment report within date range
-   * Legacy method - kept for backward compatibility
+   * Get appointment report within date range and search criteria
    */
-  async getAppointmentReport(startDate?: Date, endDate?: Date) {
-    // [DEBUG] Mock data for testing
-    /*
-    const dummyAppointments = [{
-        id: 'debug-123',
-        patientName: 'DEBUG PASIEN',
-        patientId: 'RM001',
-        doctor: { name: 'Dr. Debug', specialization: 'Umum' },
-        appointmentDate: new Date().toISOString(),
-        status: 'scheduled',
-        notes: 'Debug note'
-    }];
-    return { total: 1, byStatus: { scheduled: 1, completed: 0, cancelled: 0 }, appointments: dummyAppointments };
-    */
+  async getAppointmentReport(startDate?: Date, endDate?: Date, search?: string) {
+    const where: any = {
+      AND: []
+    };
 
-    let appointments = await this.appointmentService.getAllAppointments();
-
-    if (startDate && endDate) {
-      appointments = appointments.filter(app =>
-        app.appointmentDate >= startDate && app.appointmentDate <= endDate
-      );
+    if (startDate || endDate) {
+      const dateFilter: any = {};
+      if (startDate) dateFilter.gte = startDate;
+      if (endDate) dateFilter.lte = endDate;
+      where.AND.push({ appointmentDate: dateFilter });
     }
 
-    const report = {
-      total: appointments.length,
-      byStatus: {
-        scheduled: appointments.filter(app => app.status === 'scheduled').length,
-        completed: appointments.filter(app => app.status === 'completed').length,
-        cancelled: appointments.filter(app => app.status === 'cancelled').length,
+    if (search) {
+      where.AND.push({
+        OR: [
+          { patientName: { contains: search, mode: 'insensitive' } },
+          { patientId: { contains: search, mode: 'insensitive' } },
+          { poliCode: { contains: search, mode: 'insensitive' } },
+          { doctor: { name: { contains: search, mode: 'insensitive' } } },
+          { notes: { contains: search, mode: 'insensitive' } }
+        ]
+      });
+    }
+
+    // If AND is empty, remove it to avoid empty query issues
+    if (where.AND.length === 0) {
+      delete where.AND;
+    }
+
+    const appointments = await this.prisma.appointment.findMany({
+      where,
+      include: {
+        doctor: {
+          select: {
+            name: true,
+            specialization: true,
+            imageUrl: true,
+            isActive: true,
+            isStudying: true,
+            isOnLeave: true
+          }
+        },
+        notifications: {
+          orderBy: {
+            sentAt: 'desc'
+          }
+        }
       },
-      byDoctor: appointments.reduce((acc, app) => {
+      orderBy: {
+        appointmentDate: 'desc'
+      }
+    });
+
+    // Fetch all polikliniks to map names
+    const poliklinik = await this.khanzaService.poliklinikService.getPoliklinik();
+    const poliMap = new Map(poliklinik.map((p: any) => [p.kd_poli, p.nm_poli]));
+
+    const mappedAppointments = appointments.map((app: any) => ({
+      ...app,
+      poliName: poliMap.get(app.poliCode) || app.poliCode || '-'
+    }));
+
+    const report = {
+      total: mappedAppointments.length,
+      byStatus: {
+        scheduled: mappedAppointments.filter(app => app.status === 'scheduled').length,
+        completed: mappedAppointments.filter(app => app.status === 'completed').length,
+        cancelled: mappedAppointments.filter(app => app.status === 'cancelled').length,
+      },
+      byDoctor: mappedAppointments.reduce((acc, app) => {
         const doctorName = app.doctor.name;
         acc[doctorName] = (acc[doctorName] || 0) + 1;
         return acc;
       }, {}),
-      appointments: appointments,
+      appointments: mappedAppointments,
     };
 
     return report;
+  }
+
+  async syncAppointments(startDate: Date, endDate: Date) {
+    const doctors = await this.prisma.doctor.findMany({
+      where: { kd_dokter: { not: null } },
+      select: { kd_dokter: true }
+    });
+
+    const dates = [];
+    let current = new Date(startDate);
+    // Ensure we don't sync too many days at once (limit to 31 days)
+    const limit = new Date(startDate);
+    limit.setDate(limit.getDate() + 31);
+    const finalEnd = endDate > limit ? limit : endDate;
+
+    while (current <= finalEnd) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+
+    let totalSynced = 0;
+    for (const date of dates) {
+      for (const doctor of doctors) {
+        if (doctor.kd_dokter) {
+          try {
+            const count = await this.appointmentSync.syncRegistrations(doctor.kd_dokter, date);
+            totalSynced += count || 0;
+          } catch (error) {
+            this.logger.error(`Failed to sync for doctor ${doctor.kd_dokter} on ${date}: ${error.message}`);
+          }
+        }
+      }
+    }
+
+    return { success: true, totalSynced };
   }
 }

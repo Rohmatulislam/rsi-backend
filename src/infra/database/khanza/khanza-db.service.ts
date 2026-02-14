@@ -16,26 +16,39 @@ export class KhanzaDBService implements OnModuleDestroy {
         user: this.configService.get<string>('KHANZA_DB_USER', 'root'),
         password: this.configService.get<string>('KHANZA_DB_PASSWORD', ''),
         database: this.configService.get<string>('KHANZA_DB_NAME', 'sik'),
-        // Reconnect options untuk menghindari PROTOCOL_CONNECTION_LOST
         connectTimeout: 60000,
-        // Keep connection alive
         enableKeepAlive: true,
         keepAliveInitialDelay: 10000,
+        // Tambahkan ini untuk mysql2 driver agar otomatis reconnect jika memungkinkan
+        decimalNumbers: true,
       },
       pool: {
         min: 0,
         max: 10,
-        // Destroy idle connections setelah 30 detik untuk mencegah connection lost
-        idleTimeoutMillis: 30000,
-        // Retry connection acquisition
+        idleTimeoutMillis: 10000, // 10 detik agar cepat diputar
         acquireTimeoutMillis: 60000,
-        // Ping sebelum menggunakan koneksi untuk memastikan masih hidup
+        createTimeoutMillis: 30000,
+        reapIntervalMillis: 1000,
+        createRetryIntervalMillis: 200,
+        propagateCreateError: false,
+        validate: (conn: any) => {
+          return new Promise((resolve) => {
+            conn.query('SELECT 1', (err: any) => {
+              if (err) resolve(false);
+              else resolve(true);
+            });
+          });
+        },
         afterCreate: (conn: any, done: any) => {
-          conn.query('SELECT 1', (err: any) => {
+          conn.on('error', (err: any) => {
+            this.logger.error('MySQL Connection Error', err);
+          });
+          // Set timeout di sisi server MySQL agar tidak gampang putus
+          conn.query('SET SESSION wait_timeout=28800, SESSION interactive_timeout=28800', (err: any) => {
             done(err, conn);
           });
         },
-      },
+      } as any,
       acquireConnectionTimeout: 60000,
     });
   }

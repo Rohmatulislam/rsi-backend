@@ -5,6 +5,8 @@ import { KhanzaService } from '../../infra/database/khanza.service';
 import { PrismaService } from '../../infra/database/prisma.service';
 import { NotificationService, NotificationPayload } from '../notification/notification.service';
 import { getStartOfTodayWita } from '../../infra/utils/date.utils';
+import { format } from 'date-fns';
+import { id } from 'date-fns/locale';
 
 @Injectable()
 export class AppointmentService {
@@ -237,6 +239,19 @@ export class AppointmentService {
         ? `${createAppointmentDto.serviceItemName}${createAppointmentDto.keluhan ? ' | ' + createAppointmentDto.keluhan : ''}`
         : (createAppointmentDto.keluhan || 'Online Booking via Website');
 
+      // Fetch payer name for local storage
+      let payerName = createAppointmentDto.paymentType;
+      try {
+        const penjab = await this.khanzaService.db('penjab')
+          .where('kd_pj', createAppointmentDto.paymentType)
+          .first();
+        if (penjab) {
+          payerName = penjab.png_jawab;
+        }
+      } catch (error) {
+        this.logger.warn(`Failed to fetch payer name for ${createAppointmentDto.paymentType}`);
+      }
+
       const appointment = await this.prisma.appointment.create({
         data: {
           patientId: patient.no_rkm_medis,
@@ -244,13 +259,18 @@ export class AppointmentService {
           appointmentDate: appointmentDateTime,
           status: 'scheduled',
           reason: reason,
+          noRawat: bookingResult.no_rawat,
+          noReg: bookingResult.no_reg,
+          poliCode: poliCode,
+          payerName: payerName,
+          payerCode: createAppointmentDto.paymentType,
           notes: `No Reg: ${bookingResult.no_reg}, No Rawat: ${bookingResult.no_rawat}`,
           patientName: finalPatientName,
           patientPhone: finalPatientPhone,
           patientEmail: finalPatientEmail,
           patientAddress: finalPatientAddress,
           createdByUserId: createAppointmentDto.createdByUserId || null
-        }
+        } as any
       });
 
       // 4. Send booking confirmation notification
@@ -309,7 +329,8 @@ export class AppointmentService {
         include: {
           doctor: {
             select: {
-              name: true
+              name: true,
+              specialization: true
             }
           }
         }
@@ -461,7 +482,7 @@ export class AppointmentService {
       }
     });
 
-    return appointments.map(appointment => ({
+    return appointments.map((appointment: any) => ({
       id: appointment.id,
       patientId: appointment.patientId,
       patientName: appointment.patientName,
@@ -471,6 +492,10 @@ export class AppointmentService {
       status: appointment.status,
       reason: appointment.reason,
       notes: appointment.notes,
+      noRawat: appointment.noRawat,
+      noReg: appointment.noReg,
+      poliCode: appointment.poliCode,
+      payerName: appointment.payerName,
       doctor: appointment.doctor,
       notifications: appointment.notifications
     }));
@@ -744,7 +769,8 @@ export class AppointmentService {
       include: {
         doctor: {
           select: {
-            name: true
+            name: true,
+            specialization: true
           }
         }
       }
@@ -752,19 +778,18 @@ export class AppointmentService {
 
     // Send reschedule notification
     try {
-      const notificationPayload: NotificationPayload = {
+      const notificationPayload: any = {
         patientName: appointment.patientName || 'Patient',
         patientPhone: appointment.patientPhone || '',
-        patientEmail: appointment.patientEmail || '',
-        bookingDate: newAppointmentDate.toLocaleDateString('id-ID'),
-        bookingTime: newAppointmentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
         doctorName: updatedAppointment.doctor?.name || 'Unknown Doctor',
-        bookingCode: appointment.notes?.split(',')[0]?.replace('No Reg: ', '') || appointmentId,
-        poliName: 'Poliklinik',
+        oldDate: format(new Date(appointment.appointmentDate), "dd MMMM yyyy", { locale: id }),
+        newDate: format(new Date(newAppointmentDate), "dd MMMM yyyy", { locale: id }),
+        newTime: newAppointmentDate.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        poliName: updatedAppointment.doctor?.specialization || 'Poliklinik',
       };
 
       // Send notification about reschedule
-      await this.notificationService.sendBookingConfirmation(notificationPayload, appointment.id);
+      await this.notificationService.sendBookingReschedule(notificationPayload, appointment.id);
     } catch (notificationError) {
       this.logger.error('Failed to send reschedule notification', notificationError);
     }

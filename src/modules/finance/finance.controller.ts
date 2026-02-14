@@ -140,4 +140,28 @@ export class FinanceController {
         this.logger.log(`GET /finance-stats/bpjs-performance ${JSON.stringify({ period, date, startDate, endDate })}`);
         return this.financeService.getBPJSPerformanceReport(period, date, startDate, endDate);
     }
+
+    @Get('treatment-details')
+    async getTreatmentDetails(
+        @Query('period') period: string = 'daily',
+        @Query('date') date?: string,
+        @Query('startDate') startDate?: string,
+        @Query('endDate') endDate?: string,
+        @Query('search') search?: string,
+        @Query('category') category?: string,
+        @Query('limit') limit?: string,
+        @Query('offset') offset?: string,
+    ) {
+        this.logger.log(`GET /finance-stats/treatment-details ${JSON.stringify({ period, date, startDate, endDate, search, category, limit, offset })}`);
+        return this.financeService.getTreatmentDetailReport({
+            period,
+            date,
+            startDate,
+            endDate,
+            search,
+            category,
+            limit: limit ? parseInt(limit) : undefined,
+            offset: offset ? parseInt(offset) : undefined
+        });
+    }
 }
