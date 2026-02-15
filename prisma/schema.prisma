@@ -124,7 +124,8 @@ model User {
   passwordResetExpires DateTime?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-  appointments         Appointment[]  @relation("UserAppointments")
+  appointments         Appointment[]     @relation("UserAppointments")
+  diagnosticOrders     DiagnosticOrder[] @relation("UserDiagnosticOrders")
   accounts             Account[]
   familyMembers        FamilyMember[]
   prescriptions        Prescription[] @relation("UserPrescriptions")
@@ -474,5 +475,72 @@ model Budget {
 
   @@unique([category, period, month, year])
   @@map("budget")
+}
+
+model DiagnosticOrder {
+  id            String                @id @default(cuid())
+  orderNumber   String                @unique
+  patientId     String // no_rm from SIMRS
+  patientName   String
+  patientNIK    String
+  patientPhone  String
+  patientEmail  String?
+  scheduledDate DateTime
+  timeSlot      String
+  totalAmount   Int
+  status        DiagnosticOrderStatus @default(PENDING)
+  paymentStatus PaymentStatus         @default(UNPAID)
+  paymentMethod String?
+  paymentId     String? // Midtrans ID reference
+  notes         String?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  items         DiagnosticOrderItem[]
+  userId        String?
+  user          User?                 @relation("UserDiagnosticOrders", fields: [userId], references: [id])
+
+  @@map("diagnostic_orders")
+}
+
+model DiagnosticOrderItem {
+  id      String          @id @default(cuid())
+  orderId String
+  itemId  String // Khanza ID or Local ID
+  name    String
+  price   Int
+  type    String // MCU, LAB, RADIOLOGY
+  order   DiagnosticOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("diagnostic_order_items")
+}
+
+enum DiagnosticOrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+  EXPIRED
+  FAILED
+  REFUNDED
+}
+
+model TreatmentMetadata {
+  id            String   @id @default(cuid())
+  treatmentId   String   @unique // ID from SIMRS (e.g., PR00001)
+  type          String // MCU, LAB, RADIOLOGY
+  description   String?  @db.Text
+  preparation   String?  @db.Text // JSON string or line-separated
+  estimatedTime String?
+  isPopular     Boolean  @default(false)
+  imageUrl      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("treatment_metadata")
 }
 

@@ -1,23 +1,29 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RadiologiService as KhanzaRadiologiService } from '../../infra/database/khanza/sync/radiologi.service';
-import { RADIO_METADATA } from '../../infra/utils/treatment-metadata';
+import { TreatmentMetadataService } from '../treatment-metadata/treatment-metadata.service';
 
 @Injectable()
 export class RadiologiService {
     private readonly logger = new Logger(RadiologiService.name);
 
-    constructor(private readonly khanzaRadiologiService: KhanzaRadiologiService) { }
+    constructor(
+        private readonly khanzaRadiologiService: KhanzaRadiologiService,
+        private readonly metadataService: TreatmentMetadataService
+    ) { }
 
     async getTests(kd_pj?: string) {
         const tests = await this.khanzaRadiologiService.getTests(kd_pj);
 
-        // Apply smart categorization and metadata
-        return tests.map(test => ({
-            ...test,
-            ...RADIO_METADATA[test.id],
-            category: this.categorizeTest(test.name),
-            description: RADIO_METADATA[test.id]?.description || `Layanan radiologi ${test.name}.`,
-        }));
+        return Promise.all(
+            tests.map(async (test) => {
+                const metadata = await this.metadataService.getMergedMetadata(test.id, test.name);
+                return {
+                    ...test,
+                    ...metadata,
+                    category: this.categorizeTest(test.name),
+                };
+            })
+        );
     }
 
     async getGuarantors() {

@@ -1,11 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaService } from '../../infra/database/khanza.service';
+import { PrismaService } from '../../infra/database/prisma.service';
 
 @Injectable()
 export class DiagnosticBookingService {
     private readonly logger = new Logger(DiagnosticBookingService.name);
 
-    constructor(private readonly khanza: KhanzaService) { }
+    constructor(
+        private readonly khanza: KhanzaService,
+        private readonly prisma: PrismaService
+    ) { }
+
+    private generateOrderNumber() {
+        const date = new Date();
+        const ymd = date.toISOString().slice(0, 10).replace(/-/g, '');
+        const random = Math.floor(1000 + Math.random() * 9000);
+        return `DIAG-${ymd}-${random}`;
+    }
 
     async createBooking(data: any) {
         const { items, date, timeSlot, patient } = data;
@@ -18,7 +29,6 @@ export class DiagnosticBookingService {
             patientData = await this.khanza.findPatientByNoRM(patient.mrNumber);
         } else {
             // Create new patient logic
-            const nextNoRm = await this.khanza.getNextNoRM();
             patientData = await this.khanza.createPatient({
                 name: patient.fullName,
                 nik: patient.nik,
@@ -52,7 +62,7 @@ export class DiagnosticBookingService {
             radio: null
         };
 
-        // 3. Process MCU (Each MCU package is usually a separate booking or combined)
+        // 3. Process MCU 
         for (const pkg of mcuItems) {
             const mcuResult = await this.khanza.createMcuBooking({
                 patient: patientData,
@@ -60,14 +70,14 @@ export class DiagnosticBookingService {
                 timeSlot: timeSlot,
                 packageId: pkg.id,
                 packageName: pkg.name,
-                poliCode: 'MCU',
-                doctorCode: '-', // Generic
+                poliCode: 'U0028', // MCU Poli
+                doctorCode: 'D0000043', // Default Doctor
                 paymentType: 'A09' // UMUM
             });
             results.mcu.push(mcuResult);
         }
 
-        // 4. Process Lab (Combined)
+        // 4. Process Lab
         if (labItems.length > 0) {
             results.lab = await (this.khanza.bookingService as any).createLabBooking({
                 patient: patientData,
@@ -78,7 +88,7 @@ export class DiagnosticBookingService {
             });
         }
 
-        // 5. Process Radiologi (Combined)
+        // 5. Process Radiologi
         if (radioItems.length > 0) {
             results.radio = await (this.khanza.bookingService as any).createRadiologiBooking({
                 patient: patientData,
@@ -89,11 +99,66 @@ export class DiagnosticBookingService {
             });
         }
 
+        // 6. Save Local Diagnostic Order for Admin Management
+        let order = null;
+        try {
+            const totalAmount = items.reduce((sum: number, item: any) => sum + (item.price || 0), 0);
+            order = await this.prisma.diagnosticOrder.create({
+                data: {
+                    orderNumber: this.generateOrderNumber(),
+                    patientId: patientData.no_rkm_medis,
+                    patientName: patientData.nm_pasien,
+                    patientNIK: patient.nik || '-',
+                    patientPhone: patient.phone || '-',
+                    patientEmail: patient.email,
+                    scheduledDate: new Date(date),
+                    timeSlot: timeSlot,
+                    totalAmount: totalAmount,
+                    status: 'PENDING',
+                    paymentStatus: 'UNPAID',
+                    notes: patient.notes,
+                    items: {
+                        create: items.map((i: any) => ({
+                            itemId: i.id,
+                            name: i.name,
+                            price: i.price || 0,
+                            type: i.type
+                        }))
+                    }
+                }
+            });
+            this.logger.log(`Local DiagnosticOrder created: ${order.orderNumber}`);
+        } catch (error) {
+            this.logger.error('Failed to save local DiagnosticOrder', error);
+        }
+
         return {
             success: true,
             patient: patientData.nm_pasien,
             no_rm: patientData.no_rkm_medis,
+            orderNumber: order?.orderNumber,
             bookings: results
         };
+    }
+
+    async findAllOrders() {
+        return this.prisma.diagnosticOrder.findMany({
+            include: { items: true },
+            orderBy: { createdAt: 'desc' }
+        });
+    }
+
+    async findOrderById(id: string) {
+        return this.prisma.diagnosticOrder.findUnique({
+            where: { id },
+            include: { items: true }
+        });
+    }
+
+    async findOrderByNumber(orderNumber: string) {
+        return this.prisma.diagnosticOrder.findUnique({
+            where: { orderNumber },
+            include: { items: true }
+        });
     }
 }

@@ -34,6 +34,7 @@ import { PartnerModule } from './modules/partner/partner.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
 import { DiagnosticBookingModule } from './modules/diagnostic-booking/diagnostic-booking.module';
+import { TreatmentMetadataModule } from './modules/treatment-metadata/treatment-metadata.module';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { DiagnosticBookingModule } from './modules/diagnostic-booking/diagnostic
     FinanceModule,
     AccountingModule,
     DiagnosticBookingModule,
+    TreatmentMetadataModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100,

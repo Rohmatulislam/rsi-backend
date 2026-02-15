@@ -1,4 +1,4 @@
-import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException, Get, Param } from '@nestjs/common';
 import { DiagnosticBookingService } from './diagnostic-booking.service';
 
 @Controller('diagnostic')
@@ -12,5 +12,15 @@ export class DiagnosticBookingController {
         } catch (error: any) {
             throw new BadRequestException(error.message);
         }
+    }
+
+    @Get('orders')
+    async getOrders() {
+        return this.service.findAllOrders();
+    }
+
+    @Get('orders/:id')
+    async getOrder(@Param('id') id: string) {
+        return this.service.findOrderById(id);
     }
 }
