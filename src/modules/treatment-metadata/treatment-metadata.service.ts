@@ -28,6 +28,7 @@ export class TreatmentMetadataService {
                 preparation: staticData.preparation?.join('\n'),
                 estimatedTime: staticData.estimatedTime,
                 isPopular: staticData.isPopular || false,
+                imageUrl: null,
                 source: 'static'
             };
         }
