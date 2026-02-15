@@ -16,8 +16,9 @@ export class PharmacyQueueJob {
         private readonly pharmacyGateway: PharmacyGateway,
     ) { }
 
-    @Cron('*/10 * * * * *') // Every 10 seconds
+    // @Cron('*/10 * * * * *') // Every 10 seconds
     async handleCron() {
+        return; // Job Disabled
         const today = getTodayFormatted();
 
         // Reset tracking if day changes

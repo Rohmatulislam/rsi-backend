@@ -6,7 +6,7 @@ import { AuthController } from './auth.controller';
 import { PrismaService } from '../../infra/database/prisma.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { LocalStrategy } from './strategies/local.strategy';
-import { NotificationService } from '../notification/notification.service';
+import { NotificationModule } from '../notification/notification.module';
 
 @Module({
   imports: [
@@ -15,6 +15,7 @@ import { NotificationService } from '../notification/notification.service';
       secret: process.env.JWT_SECRET || 'rsi-hospital-secret-key-2024',
       signOptions: { expiresIn: '1d' },
     }),
+    NotificationModule,
   ],
   controllers: [AuthController],
   providers: [
@@ -22,7 +23,6 @@ import { NotificationService } from '../notification/notification.service';
     PrismaService,
     JwtStrategy,
     LocalStrategy,
-    NotificationService,
   ],
   exports: [AuthService, JwtModule],
 })

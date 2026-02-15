@@ -19,6 +19,10 @@ export class CreateArticleDto {
     image?: string;
 
     @IsOptional()
+    @IsString()
+    author?: string;
+
+    @IsOptional()
     @IsBoolean()
     isActive?: boolean;
 

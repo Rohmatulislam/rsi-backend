@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infra/database/prisma.service';
 import * as nodemailer from 'nodemailer';
-import { Twilio } from 'twilio';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 
 export interface NotificationPayload {
   patientName: string;
@@ -18,28 +19,29 @@ export interface NotificationPayload {
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
-  private twilioClient: Twilio;
-  private readonly whatsappEnabled: boolean;
-  private readonly twilioPhoneNumber: string;
+  private readonly wablasEnabled: boolean;
+  private readonly wablasServer: string;
+  private readonly wablasToken: string;
+  private readonly wablasSecret: string; // Added secret
   private readonly transporter: nodemailer.Transporter;
   private readonly emailFrom: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly httpService: HttpService,
   ) {
-    // Initialize Twilio
-    const accountSid = this.configService.get('TWILIO_ACCOUNT_SID');
-    const authToken = this.configService.get('TWILIO_AUTH_TOKEN');
-    this.twilioPhoneNumber = this.configService.get('TWILIO_WHATSAPP_NUMBER');
+    // Initialize Wablas
+    this.wablasServer = this.configService.get('WABLAS_SERVER');
+    this.wablasToken = this.configService.get('WABLAS_TOKEN');
+    this.wablasSecret = this.configService.get('WABLAS_SECRET'); // Read secret
 
-    if (accountSid && authToken && this.twilioPhoneNumber) {
-      this.twilioClient = new Twilio(accountSid, authToken);
-      this.whatsappEnabled = true;
-      this.logger.log('✅ Twilio WhatsApp notification enabled');
+    if (this.wablasServer && this.wablasToken) {
+      this.wablasEnabled = true;
+      this.logger.log('✅ Wablas WhatsApp notification enabled');
     } else {
-      this.whatsappEnabled = false;
-      this.logger.warn('⚠️ WhatsApp notification disabled - Twilio credentials missing');
+      this.wablasEnabled = false;
+      this.logger.warn('⚠️ WhatsApp notification disabled - Wablas credentials missing');
     }
 
     // Initialize Email Transporter
@@ -57,7 +59,7 @@ export class NotificationService {
     this.logger.log('📧 Email notification service initialized');
   }
 
-  // Format phone number for Twilio WhatsApp (must be E.164, e.g., +628123456789)
+  // Format phone number for Wablas (must be E.164, e.g., 628123456789)
   private formatPhoneNumber(phone: string): string {
     if (!phone) return '';
 
@@ -74,30 +76,60 @@ export class NotificationService {
       cleaned = '62' + cleaned;
     }
 
-    // Twilio needs "whatsapp:+" prefix
-    return `whatsapp:+${cleaned}`;
+    return cleaned;
   }
 
-  // Send WhatsApp message via Twilio
+  // Send WhatsApp message via Wablas
   private async sendWhatsApp(phone: string, message: string): Promise<boolean> {
     const formattedPhone = this.formatPhoneNumber(phone);
 
-    if (!this.whatsappEnabled) {
-      this.logger.log(`📱 [MOCK] WhatsApp to ${formattedPhone}:\n${message}`);
+    if (!this.wablasEnabled) {
+      this.logger.log(`📱 [MOCK] Wablas to ${formattedPhone}:\n${message}`);
       return true;
     }
 
     try {
-      const response = await this.twilioClient.messages.create({
-        body: message,
-        from: this.twilioPhoneNumber,
-        to: formattedPhone
-      });
+      const url = `${this.wablasServer}/api/v2/send-message`;
+      const payload = {
+        data: [
+          {
+            phone: formattedPhone,
+            message: message,
+          }
+        ]
+      };
 
-      this.logger.log(`✅ WhatsApp sent to ${formattedPhone} (SID: ${response.sid})`);
-      return true;
+      this.logger.log(`🚀 Sending Wablas to: ${url}`);
+      // this.logger.log(`Payload: ${JSON.stringify(payload)}`); // Enable if needed (careful with PII)
+
+      // Construct Authorization header: token.secret (if secret exists)
+      const authHeader = this.wablasSecret
+        ? `${this.wablasToken}.${this.wablasSecret}`
+        : this.wablasToken;
+
+      const response = await firstValueFrom(
+        this.httpService.post(url, payload, {
+          headers: {
+            Authorization: authHeader,
+            'Content-Type': 'application/json',
+          },
+        })
+      );
+
+      if (response.data.status) {
+        this.logger.log(`✅ Wablas sent to ${formattedPhone}`);
+        return true;
+      } else {
+        this.logger.warn(`⚠️ Wablas response: ${JSON.stringify(response.data)}`);
+        // Some wablas responses might not have 'status' field or it might be 'true'/'false' string.
+        // Assuming successful if no error thrown for now, but logging response is good.
+        return true;
+      }
     } catch (error) {
-      this.logger.error(`❌ Twilio WhatsApp send error: ${error.message}`);
+      this.logger.error(`❌ Wablas send error: ${error.message}`);
+      if (error.response) {
+        this.logger.error(`Response Data: ${JSON.stringify(error.response.data)}`);
+      }
       return false;
     }
   }

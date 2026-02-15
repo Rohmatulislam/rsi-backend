@@ -314,48 +314,91 @@ export class DoctorService {
 
           const schedulesToCreate = [];
           const changedSchedules = []; // Track days that changed for notifications
+          const matchedExistingIds = new Set<string>(); // Track which local schedules are accounted for
 
+          // Helper to normalize time "16:00:00" -> "16:00"
+          const normalizeTime = (t: string) => t ? t.substring(0, 5) : '';
+          const daysMap: { [key: string]: number } = {
+            'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
+          };
+
+          // PHASE 1: Find Exact Matches (Same Day, Start, End, Poli)
+          // This ensures unchanged schedules are matched 1-to-1 first
           for (const sched of docSchedules) {
-            const daysMap: { [key: string]: number } = {
-              'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
-            };
             const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
+            if (dayInt < 0) continue;
 
-            if (dayInt >= 0) {
-              const scheduleData = {
+            const newStart = normalizeTime(sched.jam_mulai);
+            const newEnd = normalizeTime(sched.jam_selesai);
+
+            const exactMatch = existingSchedules.find(es =>
+              !matchedExistingIds.has(es.id) &&
+              es.dayOfWeek === dayInt &&
+              normalizeTime(es.startTime) === newStart &&
+              normalizeTime(es.endTime) === newEnd &&
+              (es.kd_poli === sched.kd_poli || !es.kd_poli)
+            );
+
+            if (exactMatch) {
+              matchedExistingIds.add(exactMatch.id);
+              sched._matched = true; // Mark Khanza schedule as processed
+            }
+          }
+
+          // PHASE 2: Find Modifications (Same Day, but different Time) in remaining Khanza schedules
+          for (const sched of docSchedules) {
+            if ((sched as any)._matched) {
+              // Already matched exactly, just prepare for DB insert
+              const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
+              schedulesToCreate.push({
                 doctorId: savedDoctor.id,
                 dayOfWeek: dayInt,
                 startTime: sched.jam_mulai,
                 endTime: sched.jam_selesai,
                 kd_poli: sched.kd_poli
-              };
+              });
+              continue;
+            }
 
-              schedulesToCreate.push(scheduleData);
+            const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
+            if (dayInt >= 0) {
+              schedulesToCreate.push({
+                doctorId: savedDoctor.id,
+                dayOfWeek: dayInt,
+                startTime: sched.jam_mulai,
+                endTime: sched.jam_selesai,
+                kd_poli: sched.kd_poli
+              });
 
-              // Check if modification occurred (different time or different poli for same day)
-              // Comparison needs to be robust against "16:00:00" vs "16:00"
-              const normalizeTime = (t: string) => t ? t.substring(0, 5) : '';
+              // Look for an unmatched local schedule on the same day to flag as "MODIFIED"
+              // If we find one, it means this new schedule replaces that old one
+              const modifiedMatch = existingSchedules.find(es =>
+                !matchedExistingIds.has(es.id) &&
+                es.dayOfWeek === dayInt &&
+                (es.kd_poli === sched.kd_poli || !es.kd_poli)
+              );
 
-              const existingOnDay = existingSchedules.find((es: any) => es.dayOfWeek === dayInt && (es.kd_poli === sched.kd_poli || !es.kd_poli));
-
-              if (existingOnDay) {
-                const existingStart = normalizeTime((existingOnDay as any).startTime);
-                const existingEnd = normalizeTime((existingOnDay as any).endTime);
+              if (modifiedMatch) {
+                matchedExistingIds.add(modifiedMatch.id);
+                // Log genuine change
+                const oldStart = normalizeTime(modifiedMatch.startTime);
+                const oldEnd = normalizeTime(modifiedMatch.endTime);
                 const newStart = normalizeTime(sched.jam_mulai);
                 const newEnd = normalizeTime(sched.jam_selesai);
 
-                if (existingStart !== newStart || existingEnd !== newEnd) {
-                  // Only log if real change
-                  // this.logger.debug(`[DIFF] ${doc.nm_dokter} Day ${dayInt}: ${existingStart}-${existingEnd} vs ${newStart}-${newEnd}`);
+                // Only log if times are actually different (redundant check but safe)
+                if (oldStart !== newStart || oldEnd !== newEnd) {
                   changedSchedules.push({ dayOfWeek: dayInt, kd_poli: sched.kd_poli, type: 'modified' });
                 }
+              } else {
+                // No local match found? It's a NEW schedule added.
+                // We can log this as 'added' if we want notifications for new slots, 
+                // currently we only care about changes to existing slots that might affect appointments.
+                // So we do nothing here regarding notifications.
               }
-
               // 4. Link to Category (Poli)
               const poli = kPolis.find(p => p.kd_poli === sched.kd_poli);
               if (poli) {
-
-
                 const poliSlug = poli.nm_poli.toLowerCase().replace(/[^a-z0-9]+/g, '-');
                 let categoryId = categoryCache.get(poliSlug);
 
@@ -369,7 +412,6 @@ export class DoctorService {
                   categoryCache.set(poliSlug, categoryId);
                 }
 
-                // Connect if not already
                 const isConnected = await this.prisma.doctor.findFirst({
                   where: { id: savedDoctor.id, categories: { some: { id: categoryId } } }
                 });
@@ -386,18 +428,14 @@ export class DoctorService {
 
           // Detect deleted schedules
           for (const es of existingSchedules) {
-            const stillExists = docSchedules.some(ns => {
-              const daysMap: { [key: string]: number } = {
-                'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
-              };
-              return daysMap[ns.hari_kerja.toUpperCase()] === (es as any).dayOfWeek && (ns.kd_poli === (es as any).kd_poli || !(es as any).kd_poli);
-            });
-            if (!stillExists) {
-              changedSchedules.push({ dayOfWeek: (es as any).dayOfWeek, kd_poli: (es as any).kd_poli, type: 'deleted' });
+            if (!matchedExistingIds.has(es.id)) {
+              // This local schedule exists but was not matched by any incoming Khanza schedule.
+              // It is effectively DELETED.
+              changedSchedules.push({ dayOfWeek: es.dayOfWeek, kd_poli: es.kd_poli, type: 'deleted' });
             }
           }
 
-          // Update DB - Delete all then recreate is simplest but we lose IDs (ok for sync)
+          // Update DB
           await this.prisma.schedule.deleteMany({ where: { doctorId: savedDoctor.id } });
           if (schedulesToCreate.length > 0) {
             await this.prisma.schedule.createMany({ data: schedulesToCreate });
@@ -405,8 +443,6 @@ export class DoctorService {
 
           // Trigger notifications if changes detected
           if (changedSchedules.length > 0) {
-            // Check if we actually have patients to notify before making a fuss
-            // This prevents "Notifying 0 patients" noise
             this.handleScheduleChangeNotifications(savedDoctor.id, doc.kd_dokter, doc.nm_dokter, changedSchedules).catch(err => {
               this.logger.error(`Error sending schedule change notifications for ${doc.kd_dokter}`, err);
             });
@@ -826,6 +862,7 @@ export class DoctorService {
             dayOfWeek: true,
             startTime: true,
             endTime: true,
+            kd_poli: true, // Added for consistency
           }
         },
         categories: {
@@ -1036,6 +1073,7 @@ export class DoctorService {
             dayOfWeek: true,
             startTime: true,
             endTime: true,
+            kd_poli: true, // Added for offline fallback
           }
         },
         categories: {
@@ -1111,14 +1149,14 @@ export class DoctorService {
             scheduleDetails
           };
         }
-      } catch (error) {
-        console.error(`❌ [FIND_BY_SLUG] Error fetching from Khanza for doctor ${doctor.kd_dokter}:`, error.message);
+      } catch (err) {
+        console.error(`❌ [FIND_BY_SLUG] Error fetching from Khanza for doctor ${doctor.kd_dokter}:`, err.message);
       }
     }
 
     if (!doctor) {
       const idBasedDoctor = await this.prisma.doctor.findUnique({
-        where: { id: slug }, // Handle ID passed as slug
+        where: { id: slug },
         select: {
           id: true,
           name: true,
@@ -1141,8 +1179,8 @@ export class DoctorService {
           kd_dokter: true,
           description: true,
           isActive: true,
-          ...({ isStudying: true } as any),
-          ...({ isOnLeave: true } as any),
+          isStudying: true,
+          isOnLeave: true,
           schedules: {
             select: {
               id: true,
@@ -1164,9 +1202,7 @@ export class DoctorService {
 
       if (idBasedDoctor && idBasedDoctor.kd_dokter) {
         try {
-          // Get schedule details from Khanza including poli information
           const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(idBasedDoctor.kd_dokter as any);
-
           if (kSchedules && kSchedules.length > 0) {
             const scheduleDetails = kSchedules.map(schedule => ({
               kd_poli: schedule.kd_poli,
@@ -1177,17 +1213,12 @@ export class DoctorService {
               kuota: schedule.kuota,
               consultation_fee: schedule.registrasi || 0,
             }));
-
-            return {
-              ...idBasedDoctor,
-              scheduleDetails
-            };
+            return { ...idBasedDoctor, scheduleDetails };
           }
         } catch (error) {
           console.error(`❌ [FIND_BY_ID_FALLBACK] Error fetching from Khanza for doctor ${idBasedDoctor.kd_dokter}:`, error.message);
         }
       }
-
       return idBasedDoctor;
     }
 

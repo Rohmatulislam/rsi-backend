@@ -125,17 +125,18 @@ export class AppointmentSyncService {
 
                     // Send Notification: RESCHEDULE
                     this.logger.log(`📢 [RESCHEDULE_DETECTED] ${appt.patientName}: ${appt.appointmentDate} -> ${newDate}`);
-                    await this.notificationService.sendBookingReschedule({
-                        patientName: appt.patientName,
-                        patientPhone: appt.patientPhone,
-                        bookingDate: appt.appointmentDate.toISOString().split('T')[0],
-                        bookingTime: appt.appointmentDate.toTimeString().split(' ')[0],
-                        newDate: tglStr,
-                        newTime: jamStr,
-                        doctorName: appt.doctor.name,
-                        bookingCode: replacementReg.no_reg,
-                        poliName: appt.poliCode // Simplified
-                    }, appt.id);
+                    // [DISABLED_AUTO_NOTIF] Prevent spamming users due to sync date mismatch
+                    // await this.notificationService.sendBookingReschedule({
+                    //     patientName: appt.patientName,
+                    //     patientPhone: appt.patientPhone,
+                    //     bookingDate: appt.appointmentDate.toISOString().split('T')[0],
+                    //     bookingTime: appt.appointmentDate.toTimeString().split(' ')[0],
+                    //     newDate: tglStr,
+                    //     newTime: jamStr,
+                    //     doctorName: appt.doctor.name,
+                    //     bookingCode: replacementReg.no_reg,
+                    //     poliName: appt.poliCode // Simplified
+                    // }, appt.id);
 
                 } else {
                     // No replacement found. This is a pure CANCELLATION.
@@ -219,10 +220,24 @@ export class AppointmentSyncService {
             // 3. Upsert into Local DB
             let syncedCount = 0;
             for (const reg of khanzaRegs) {
-                // Ensure date and time are merged correctly for WITA (UTC+8)
-                const tglStr = reg.tgl_registrasi instanceof Date
-                    ? reg.tgl_registrasi.toISOString().split('T')[0]
-                    : String(reg.tgl_registrasi).split(' ')[0];
+                // Ensure date and time are merged correctly ensuring we keep the LOCAL date from Khanza
+                // Khanza returns 'Sun Feb 15 2026 00:00:00 GMT+0800' for tgl_registrasi.
+                // Using toISOString() converts this to '2026-02-14T16:00:00.000Z', shifting the day!
+                // We MUST use the local date parts or simple string manipulation if it's already a string.
+
+                let tglStr = '';
+                if (reg.tgl_registrasi instanceof Date) {
+                    // Extract YYYY-MM-DD in Local Time (assuming server is in same timezone or date object is correct local representation)
+                    // Better yet, just take the date string directly from format if possible, but manually is safer using offset logic if needed.
+                    // Since we know the log shows GMT+0800, getFullYear() uses local time.
+                    const d = reg.tgl_registrasi;
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    tglStr = `${year}-${month}-${day}`;
+                } else {
+                    tglStr = String(reg.tgl_registrasi).split(' ')[0];
+                }
 
                 let jamStr = reg.jam_reg || '00:00:00';
 
@@ -261,18 +276,23 @@ export class AppointmentSyncService {
                     } else if (isTimeChanged && !isCancelled) {
                         this.logger.log(`⏰ Booking rescheduled: ${existing.appointmentDate} -> ${appointmentDate}`);
 
+                        // Debug Date Mismatch
+                        this.logger.debug(`🔍 [DATE_DEBUG] Existing: ${existing.appointmentDate.toISOString()} | Incoming: ${appointmentDate.toISOString()}`);
+                        this.logger.debug(`🔍 [DATE_DEBUG] Raw Tgl: ${reg.tgl_registrasi} (${typeof reg.tgl_registrasi}) | Raw Jam: ${reg.jam_reg}`);
+
+                        // [DISABLED_AUTO_NOTIF] Prevent spamming users
                         // Send Reschedule Notification
-                        await this.notificationService.sendBookingReschedule({
-                            patientName: reg.nm_pasien,
-                            patientPhone: reg.no_tlp,
-                            bookingDate: existing.appointmentDate.toISOString().split('T')[0], // Old date
-                            bookingTime: existing.appointmentDate.toTimeString().split(' ')[0], // Old time
-                            newDate: tglStr,
-                            newTime: jamStr,
-                            doctorName: doctor.name,
-                            bookingCode: reg.no_reg,
-                            poliName: reg.kd_poli // Simplification, ideally map to Name
-                        }, existing.id);
+                        // await this.notificationService.sendBookingReschedule({
+                        //     patientName: reg.nm_pasien,
+                        //     patientPhone: reg.no_tlp,
+                        //     bookingDate: existing.appointmentDate.toISOString().split('T')[0], // Old date
+                        //     bookingTime: existing.appointmentDate.toTimeString().split(' ')[0], // Old time
+                        //     newDate: tglStr,
+                        //     newTime: jamStr,
+                        //     doctorName: doctor.name,
+                        //     bookingCode: reg.no_reg,
+                        //     poliName: reg.kd_poli // Simplification, ideally map to Name
+                        // }, existing.id);
                     }
                 }
 
@@ -332,7 +352,21 @@ export class AppointmentSyncService {
             .pluck('tgl_registrasi');
 
         for (const date of dates) {
-            const formattedDate = new Date(date).toISOString().split('T')[0];
+            // FIX: Avoid toISOString() which converts to UTC and shifts date back by 1 day!
+            // Khanza 'tgl_registrasi' is likely a Date object at 00:00:00 Local Time.
+            // We want to keep the local YYYY-MM-DD.
+            let formattedDate = '';
+
+            if (date instanceof Date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                formattedDate = `${year}-${month}-${day}`;
+            } else {
+                // Fallback if it's already a string
+                formattedDate = String(date).split('T')[0];
+            }
+
             await this.syncRegistrations(doctorCode, formattedDate);
         }
     }
