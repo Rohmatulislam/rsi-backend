@@ -8,6 +8,8 @@ import { getStartOfTodayWita } from '../../infra/utils/date.utils';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
 
+import { isExecutive } from '../../infra/utils/naming.utils';
+
 @Injectable()
 export class AppointmentService {
   private readonly logger = new Logger(AppointmentService.name);
@@ -28,10 +30,10 @@ export class AppointmentService {
     const availablePolis = await this.khanzaService.getPoliklinik();
 
     // Cari mapping berdasarkan nama kategori yang diketahui
-    if (categoryName.includes('Eksekutif') || categoryName.includes('eksekutif')) {
+    if (isExecutive(categoryName)) {
       // Jika nama kategori mengandung kata 'Eksekutif', cari poliklinik eksekutif yang cocok
       const execPoli = availablePolis.find((poli: any) =>
-        (poli.nm_poli.toLowerCase().includes('eksekutif') || poli.nm_poli.toLowerCase().includes('executive')) &&
+        isExecutive(poli.nm_poli) &&
         (poli.nm_poli.toLowerCase().includes(doctorCode.toLowerCase()) ||
           this.categoryMatchesDoctorSpecialty(categoryName, poli.nm_poli))
       );

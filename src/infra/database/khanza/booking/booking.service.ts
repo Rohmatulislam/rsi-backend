@@ -183,6 +183,74 @@ export class BookingService {
     }
   }
 
+  async createLabBooking(data: {
+    patient: any;
+    date: string;
+    timeSlot: string;
+    tests: Array<{ id: string, name: string }>;
+    paymentType?: string;
+  }) {
+    const { patient, date, timeSlot, tests, paymentType } = data;
+    const noReg = await this.getNextNoRegBooking('-', date); // Use '-' for generic lab doctor if unknown
+
+    const noBooking = `LB${date.replace(/-/g, '')}${patient.no_rkm_medis.slice(-4)}${noReg}`;
+
+    const bookingPeriksaData = {
+      no_booking: noBooking.slice(0, 17),
+      tanggal: date,
+      nama: patient.nm_pasien,
+      alamat: patient.alamat || '-',
+      no_telp: patient.no_tlp || '-',
+      email: patient.email || '-',
+      kd_poli: 'LAB', // Standard code
+      tambahan_pesan: `Pemeriksaan Lab: ${tests.map(t => t.name).join(', ')}`,
+      status: 'Belum Dibalas',
+      tanggal_booking: new Date()
+    };
+
+    try {
+      await this.dbService.db('booking_periksa').insert(bookingPeriksaData);
+      return { success: true, no_booking: noBooking };
+    } catch (e) {
+      this.logger.error('Error creating Lab booking', e);
+      throw e;
+    }
+  }
+
+  async createRadiologiBooking(data: {
+    patient: any;
+    date: string;
+    timeSlot: string;
+    tests: Array<{ id: string, name: string }>;
+    paymentType?: string;
+  }) {
+    const { patient, date, timeSlot, tests, paymentType } = data;
+    const noReg = await this.getNextNoRegBooking('-', date);
+
+    const noBooking = `RD${date.replace(/-/g, '')}${patient.no_rkm_medis.slice(-4)}${noReg}`;
+
+    const bookingPeriksaData = {
+      no_booking: noBooking.slice(0, 17),
+      tanggal: date,
+      nama: patient.nm_pasien,
+      alamat: patient.alamat || '-',
+      no_telp: patient.no_tlp || '-',
+      email: patient.email || '-',
+      kd_poli: 'RAD', // Standard code
+      tambahan_pesan: `Pemeriksaan Radiologi: ${tests.map(t => t.name).join(', ')}`,
+      status: 'Belum Dibalas',
+      tanggal_booking: new Date()
+    };
+
+    try {
+      await this.dbService.db('booking_periksa').insert(bookingPeriksaData);
+      return { success: true, no_booking: noBooking };
+    } catch (e) {
+      this.logger.error('Error creating Radiologi booking', e);
+      throw e;
+    }
+  }
+
   async getNextNoRegBooking(doctorCode: string, date: string): Promise<string> {
     const lastReg = await this.dbService.db('booking_registrasi')
       .where('kd_dokter', doctorCode)

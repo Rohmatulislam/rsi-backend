@@ -14,14 +14,12 @@ import { MonitoringService } from './khanza/monitoring/monitoring.service';
 import { KhanzaFarmasiService } from './khanza/farmasi/farmasi.service';
 import { KhanzaRehabilitationService } from './khanza/rehabilitation/rehabilitation.service';
 import { KhanzaDBService } from './khanza/khanza-db.service';
+import { CacheService } from '../cache/cache.service';
 
 @Injectable()
 export class KhanzaService implements OnModuleInit {
   private readonly logger = new Logger(KhanzaService.name);
 
-  // Cache untuk menyimpan hasil query queue info, valid selama 5 menit
-  private readonly queueCache = new Map<string, { data: any; timestamp: number }>();
-  private readonly QUEUE_CACHE_DURATION = 5 * 60 * 1000; // 5 menit dalam milidetik
 
   // Gunakan koneksi dari KhanzaDBService, bukan buat sendiri
   public get db(): Knex {
@@ -32,6 +30,7 @@ export class KhanzaService implements OnModuleInit {
   constructor(
     private configService: ConfigService,
     private readonly dbService: KhanzaDBService, // Inject KhanzaDBService
+    private readonly cache: CacheService, // Inject CacheService
     public readonly bookingService: BookingService,
     public readonly patientService: PatientService,
     public readonly poliklinikService: PoliklinikService,
@@ -109,33 +108,27 @@ export class KhanzaService implements OnModuleInit {
 
   async getQueueInfo(poliCode: string, date: string) {
     const cacheKey = `queue_${poliCode}_${date}`;
-    const now = Date.now();
 
     // Cek apakah data ada di cache dan masih valid
-    const cached = this.queueCache.get(cacheKey);
-    if (cached && (now - cached.timestamp) < this.QUEUE_CACHE_DURATION) {
-      this.logger.debug(`Mengambil data queue info dari cache untuk poli ${poliCode} pada tanggal ${date}`);
-      return cached.data;
+    const cachedData = this.cache.get(cacheKey);
+    if (cachedData) {
+      return cachedData;
     }
 
     try {
       const result = await this.bookingService.getQueueInfo(poliCode, date);
 
       // Simpan hasil ke cache
-      this.queueCache.set(cacheKey, { data: result, timestamp: now });
+      this.cache.set(cacheKey, result);
 
       return result;
     } catch (error) {
       this.logger.error(`Failed to get queue info for poli ${poliCode} on ${date}:`, error);
 
-      // Coba kembalikan data dari cache jika error terjadi, jika tersedia
-      const cachedOnError = this.queueCache.get(cacheKey);
-      if (cachedOnError && (now - cachedOnError.timestamp) < this.QUEUE_CACHE_DURATION) {
-        this.logger.warn(`Mengembalikan data queue info dari cache karena error terjadi untuk poli ${poliCode} pada tanggal ${date}`);
-        return cachedOnError.data;
-      }
+      // Coba kembalikan data dari cache jika error terjadi, jika tersedia (meskipun expired di level get, kita bisa manual cek atau pasrah)
+      // Namun get(key) sudah otomatis cek expiry. Jika kita ingin "stale while revalidate" behavior, kita butuh logika lebih kompleks.
+      // Untuk sekarang, kita cukup kembalikan default.
 
-      // Jika tidak ada data cache, kembalikan data default
       return {
         total: 0,
         served: 0,

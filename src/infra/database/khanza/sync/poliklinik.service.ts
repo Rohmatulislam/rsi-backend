@@ -1,15 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaDBService } from '../khanza-db.service';
+import { isExecutive } from '../../../utils/naming.utils';
+import { CacheService } from '../../../cache/cache.service';
 
 @Injectable()
 export class PoliklinikService {
   private readonly logger = new Logger(PoliklinikService.name);
 
-  // Cache untuk menyimpan hasil query, valid selama 5 menit
-  private readonly cache = new Map<string, { data: any; timestamp: number }>();
-  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 menit dalam milidetik
-
-  constructor(private readonly dbService: KhanzaDBService) { }
+  constructor(
+    private readonly dbService: KhanzaDBService,
+    private readonly cache: CacheService
+  ) { }
 
   async getPoliklinik() {
     return this.dbService.db('poliklinik').select('kd_poli', 'nm_poli', 'registrasi');
@@ -17,13 +18,11 @@ export class PoliklinikService {
 
   async getPoliklinikWithActiveSchedules() {
     const cacheKey = 'poliklinikWithActiveSchedules';
-    const now = Date.now();
 
     // Cek apakah data ada di cache dan masih valid
-    const cached = this.cache.get(cacheKey);
-    if (cached && (now - cached.timestamp) < this.CACHE_DURATION) {
-      this.logger.debug('Mengambil data poliklinik dari cache');
-      return cached.data;
+    const cachedData = this.cache.get(cacheKey);
+    if (cachedData) {
+      return cachedData;
     }
 
     // Jika tidak ada di cache atau sudah expired, ambil dari database
@@ -35,30 +34,22 @@ export class PoliklinikService {
       .whereNotNull('poliklinik.nm_poli') // Pastikan poli memiliki nama
       .distinct();
 
-    // Simpan hasil ke cache
-    this.cache.set(cacheKey, { data: result, timestamp: now });
+    // Simpan hasil ke cache (default 5 menit)
+    this.cache.set(cacheKey, result);
 
     return result;
   }
 
   async getPoliklinikExecutiveWithActiveSchedules() {
     const result = await this.getPoliklinikWithActiveSchedules();
-    // Filter those containing 'Eksekutif' or 'Ekskutif'
-    return result.filter((poli: any) =>
-      poli.nm_poli.toLowerCase().includes('eksekutif') ||
-      poli.nm_poli.toLowerCase().includes('ekskutif') ||
-      poli.nm_poli.toLowerCase().includes('executive')
-    );
+    // Filter those containing 'Eksekutif', 'Ekskutif', or 'Executive' via utility
+    return result.filter((poli: any) => isExecutive(poli.nm_poli));
   }
 
   async getPoliklinikRegularWithActiveSchedules() {
     const result = await this.getPoliklinikWithActiveSchedules();
-    // Filter those NOT containing 'Eksekutif' or 'Ekskutif'
-    return result.filter((poli: any) =>
-      !poli.nm_poli.toLowerCase().includes('eksekutif') &&
-      !poli.nm_poli.toLowerCase().includes('ekskutif') &&
-      !poli.nm_poli.toLowerCase().includes('executive')
-    );
+    // Filter those NOT indicating executive service
+    return result.filter((poli: any) => !isExecutive(poli.nm_poli));
   }
 
   async getPoliByKdPoli(kdPoli: string) {

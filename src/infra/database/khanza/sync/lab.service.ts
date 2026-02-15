@@ -1,17 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaDBService } from '../khanza-db.service';
+import { CacheService } from '../../../cache/cache.service';
 
 @Injectable()
 export class LabService {
     private readonly logger = new Logger(LabService.name);
 
-    constructor(private readonly dbService: KhanzaDBService) { }
+    constructor(
+        private readonly dbService: KhanzaDBService,
+        private readonly cache: CacheService
+    ) { }
 
     /**
      * Mengambil daftar pemeriksaan laboratorium dari Khanza
      * Tabel: jns_perawatan_lab
      */
     async getGuarantors() {
+        const cacheKey = 'khanza_lab_guarantors';
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
             const guarantors = await this.dbService.db('jns_perawatan_lab')
                 .distinct('jns_perawatan_lab.kd_pj')
@@ -20,6 +28,8 @@ export class LabService {
                 .where('jns_perawatan_lab.status', '1')
                 .andWhere('jns_perawatan_lab.total_byr', '>', 0)
                 .orderBy('penjab.png_jawab', 'asc');
+
+            this.cache.set(cacheKey, guarantors);
             return guarantors;
         } catch (error) {
             this.logger.error('Error fetching lab guarantors from Khanza', error);
@@ -28,6 +38,10 @@ export class LabService {
     }
 
     async getTests(kd_pj?: string) {
+        const cacheKey = `khanza_lab_tests_${kd_pj || 'default'}`;
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
             const query = this.dbService.db('jns_perawatan_lab')
                 .select(
@@ -74,11 +88,14 @@ export class LabService {
             }));
 
             // Filter out tests that have 0 price AND no templates with price
-            return testsWithTemplates.filter(test => {
+            const result = testsWithTemplates.filter(test => {
                 const hasPrice = (test.price || 0) > 0;
                 const hasTemplateWithPrice = test.template.some(t => (t.price || 0) > 0);
                 return hasPrice || hasTemplateWithPrice;
             });
+
+            this.cache.set(cacheKey, result);
+            return result;
         } catch (error) {
             this.logger.error('Error fetching Lab tests from Khanza', error);
             return [];
@@ -86,8 +103,12 @@ export class LabService {
     }
 
     async getTestById(id: string) {
+        const cacheKey = `khanza_lab_test_${id}`;
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
-            return this.dbService.db('jns_perawatan_lab')
+            const result = await this.dbService.db('jns_perawatan_lab')
                 .select(
                     'kd_jenis_prw as id',
                     'nm_perawatan as name',
@@ -98,6 +119,9 @@ export class LabService {
                 )
                 .where('kd_jenis_prw', id)
                 .first();
+
+            this.cache.set(cacheKey, result);
+            return result;
         } catch (error) {
             this.logger.error(`Error fetching lab test ${id}`, error);
             return null;
@@ -105,8 +129,12 @@ export class LabService {
     }
 
     async getTemplateById(id: number) {
+        const cacheKey = `khanza_lab_template_${id}`;
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
-            return this.dbService.db('template_laboratorium as t')
+            const result = await this.dbService.db('template_laboratorium as t')
                 .join('jns_perawatan_lab as j', 't.kd_jenis_prw', 'j.kd_jenis_prw')
                 .select(
                     't.kd_jenis_prw',
@@ -123,6 +151,9 @@ export class LabService {
                 )
                 .where('t.id_template', id)
                 .first();
+
+            this.cache.set(cacheKey, result);
+            return result;
         } catch (error) {
             this.logger.error(`Error fetching lab template item ${id}`, error);
             return null;
@@ -130,6 +161,10 @@ export class LabService {
     }
 
     async getCategories(kd_pj?: string) {
+        const cacheKey = `khanza_lab_categories_${kd_pj || 'default'}`;
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
             const query = this.dbService.db('jns_perawatan_lab')
                 .distinct('kategori')
@@ -143,7 +178,10 @@ export class LabService {
             }
 
             const categories = await query;
-            return categories.map(c => c.kategori);
+            const result = categories.map(c => c.kategori);
+
+            this.cache.set(cacheKey, result);
+            return result;
         } catch (error) {
             this.logger.error('Error fetching Lab categories', error);
             return [];

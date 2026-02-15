@@ -33,6 +33,7 @@ import { StatsModule } from './modules/stats/stats.module';
 import { PartnerModule } from './modules/partner/partner.module';
 import { FinanceModule } from './modules/finance/finance.module';
 import { AccountingModule } from './modules/accounting/accounting.module';
+import { DiagnosticBookingModule } from './modules/diagnostic-booking/diagnostic-booking.module';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { AccountingModule } from './modules/accounting/accounting.module';
     PartnerModule,
     FinanceModule,
     AccountingModule,
+    DiagnosticBookingModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100,

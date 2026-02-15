@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RadiologiService as KhanzaRadiologiService } from '../../infra/database/khanza/sync/radiologi.service';
+import { RADIO_METADATA } from '../../infra/utils/treatment-metadata';
 
 @Injectable()
 export class RadiologiService {
@@ -10,10 +11,12 @@ export class RadiologiService {
     async getTests(kd_pj?: string) {
         const tests = await this.khanzaRadiologiService.getTests(kd_pj);
 
-        // Apply smart categorization
+        // Apply smart categorization and metadata
         return tests.map(test => ({
             ...test,
-            category: this.categorizeTest(test.name)
+            ...RADIO_METADATA[test.id],
+            category: this.categorizeTest(test.name),
+            description: RADIO_METADATA[test.id]?.description || `Layanan radiologi ${test.name}.`,
         }));
     }
 

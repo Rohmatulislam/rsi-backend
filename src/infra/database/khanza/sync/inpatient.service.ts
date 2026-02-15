@@ -1,17 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaDBService } from '../khanza-db.service';
+import { CacheService } from '../../../cache/cache.service';
 
 @Injectable()
 export class InpatientService {
     private readonly logger = new Logger(InpatientService.name);
 
-    constructor(private readonly dbService: KhanzaDBService) { }
+    constructor(
+        private readonly dbService: KhanzaDBService,
+        private readonly cache: CacheService
+    ) { }
 
     /**
      * Mengambil ketersediaan bed (tempat tidur) dari Khanza
      * Tabel: kamar, bangsal
      */
     async getBedAvailability() {
+        const cacheKey = 'khanza_bed_availability';
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
             // Query raw untuk mendapatkan statistik ketersediaan bed per bangsal dan kelas
             // status 'ISI' (occupied), 'KOSONG' (available)
@@ -29,13 +37,16 @@ export class InpatientService {
                 .groupBy('bangsal.kd_bangsal', 'bangsal.nm_bangsal', 'kamar.kelas')
                 .orderBy('bangsal.nm_bangsal', 'asc');
 
-            return beds.map(bed => ({
+            const result = beds.map(bed => ({
                 unitId: bed.kd_bangsal,
                 unitName: bed.nm_bangsal,
                 class: bed.kelas,
                 total: parseInt(bed.total as string),
                 available: parseInt(bed.available as string),
             }));
+
+            this.cache.set(cacheKey, result);
+            return result;
         } catch (error) {
             this.logger.error('Error fetching bed availability from Khanza', error);
             return [];
@@ -47,6 +58,10 @@ export class InpatientService {
      * Tabel: kamar, bangsal
      */
     async getDetailedRooms() {
+        const cacheKey = 'khanza_detailed_rooms';
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
             const rooms = await this.dbService.db('kamar')
                 .join('bangsal', 'kamar.kd_bangsal', 'bangsal.kd_bangsal')
@@ -62,7 +77,7 @@ export class InpatientService {
                 .andWhere('bangsal.status', '1')
                 .orderBy('kamar.kd_kamar', 'asc');
 
-            return rooms.map(room => ({
+            const result = rooms.map(room => ({
                 id: room.id,
                 unitId: room.unitId,
                 unitName: room.unitName,
@@ -70,6 +85,9 @@ export class InpatientService {
                 status: room.status, // 'ISI', 'KOSONG', 'DIBERSIHKAN'
                 price: parseFloat(room.price as string),
             }));
+
+            this.cache.set(cacheKey, result);
+            return result;
         } catch (error) {
             this.logger.error('Error fetching detailed rooms from Khanza', error);
             return [];
@@ -80,11 +98,18 @@ export class InpatientService {
      * Mengambil daftar unit (paviliun/unit)
      */
     async getUnits() {
+        const cacheKey = 'khanza_inpatient_units';
+        const cached = this.cache.get(cacheKey);
+        if (cached) return cached;
+
         try {
-            return await this.dbService.db('bangsal')
+            const result = await this.dbService.db('bangsal')
                 .select('kd_bangsal as id', 'nm_bangsal as name')
                 .where('status', '1')
                 .orderBy('nm_bangsal', 'asc');
+
+            this.cache.set(cacheKey, result);
+            return result;
         } catch (error) {
             this.logger.error('Error fetching units from Khanza', error);
             return [];

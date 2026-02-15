@@ -6,6 +6,7 @@ import { UpdateServiceDto, UpdateServiceItemDto } from './dto/update-service.dto
 import { FileUploadService } from './services/file-upload.service';
 
 import { KhanzaService } from '../../infra/database/khanza.service';
+import { normalizePoliName, POLI_KEYWORDS_REGEX, isExecutive } from '../../infra/utils/naming.utils';
 
 @Injectable()
 export class ServiceService {
@@ -88,8 +89,8 @@ export class ServiceService {
 
                         // Check if this SIMRS poli matches any existing CMS item
                         const matchedIdx = mergedItems.findIndex(i => {
-                            const poliNameClean = poliNameLower.replace(/poliklinik|poli|klinik|eksekutif|ekskutif|executive/gi, '').trim();
-                            const itemNameClean = i.name.toLowerCase().replace(/poliklinik|poli|klinik|eksekutif|ekskutif|executive/gi, '').trim();
+                            const poliNameClean = normalizePoliName(poli.nm_poli).toLowerCase();
+                            const itemNameClean = normalizePoliName(i.name).toLowerCase();
 
                             if (poliNameClean.length < 3 || itemNameClean.length < 3) {
                                 return i.name.toLowerCase() === poliNameLower;

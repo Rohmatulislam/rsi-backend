@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { LabService as KhanzaLabService } from '../../infra/database/khanza/sync/lab.service';
+import { LAB_METADATA } from '../../infra/utils/treatment-metadata';
 
 @Injectable()
 export class LabService {
@@ -12,7 +13,13 @@ export class LabService {
     }
 
     async getTests(kd_pj?: string) {
-        return this.khanzaLabService.getTests(kd_pj);
+        const tests = await this.khanzaLabService.getTests(kd_pj);
+        return tests.map(test => ({
+            ...test,
+            ...LAB_METADATA[test.id],
+            // Fallback description if not in metadata
+            description: LAB_METADATA[test.id]?.description || `Pemeriksaan laboratorium ${test.name}.`,
+        }));
     }
 
     async getTemplateById(id: number) {

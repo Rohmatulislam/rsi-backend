@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { PrismaService } from './prisma.service';
 import { KhanzaService } from './khanza.service';
 import { KhanzaDBService } from './khanza/khanza-db.service';
+import { CacheService } from '../cache/cache.service';
 import { BookingModule } from './khanza/booking/booking.module';
 import { PatientModule } from './khanza/patient/patient.module';
 import { SyncModule } from './khanza/sync/sync.module';
@@ -21,11 +22,12 @@ import { KhanzaRehabilitationModule } from './khanza/rehabilitation/rehabilitati
     KhanzaFarmasiModule,
     KhanzaRehabilitationModule,
   ],
-  providers: [PrismaService, KhanzaDBService, KhanzaService],
+  providers: [PrismaService, KhanzaDBService, KhanzaService, CacheService],
   exports: [
     PrismaService,
     KhanzaDBService,
     KhanzaService,
+    CacheService,
     BookingModule,
     PatientModule,
     SyncModule,
