@@ -367,7 +367,8 @@ export class NotificationService {
 
   private generateRescheduleMessage(payload: any): string {
     const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName, newDate, newTime } = payload;
-    return `*PERUBAHAN JADWAL RSI*\n\nHalo ${patientName},\nJadwal Anda berubah.\n\nJadwal BARU:\nTanggal: *${newDate}*\nJam: *${newTime}* WIB\n\n(Booking Awal: ${bookingDate} ${bookingTime})\nDokter: ${doctorName}`;
+    const websiteUrl = this.configService.get('FRONTEND_URL') || 'https://rsisitihajarmataram.co.id';
+    return `*PERUBAHAN JADWAL RSI*\n\nHalo ${patientName},\nJadwal Anda berubah.\n\nJadwal BARU:\nTanggal: *${newDate}*\nJam: *${newTime}* WIB\n\n(Booking Awal: ${bookingDate} ${bookingTime})\nDokter: ${doctorName}\n\nInfo lengkap: ${websiteUrl}/doctors`;
   }
 
   private generateScheduleChangeMessage(payload: any): string {
@@ -375,7 +376,8 @@ export class NotificationService {
     let changeText = `terdapat perubahan jam praktek`;
     if (type === 'deleted') changeText = `jadwal praktek ditiadakan`;
 
-    return `*INFO JADWAL DOKTER*\n\nHalo ${patientName},\nUntuk hari *${dayName}*, ${changeText} dokter:\n\nNama: ${doctorName}\nPoli: ${poliName}\n${type === 'modified' ? `Jam Baru: ${newTime} WIB` : ''}\n\nMohon cek website untuk jadwal update.`;
+    const websiteUrl = this.configService.get('FRONTEND_URL') || 'https://rsisitihajarmataram.co.id';
+    return `*INFO JADWAL DOKTER*\n\nHalo ${patientName},\nUntuk hari *${dayName}*, ${changeText} dokter:\n\nNama: ${doctorName}\nPoli: ${poliName}\n${type === 'modified' ? `Jam Baru: ${newTime} WIB` : ''}\n\nCek jadwal terbaru di: ${websiteUrl}/doctors`;
   }
 
   private generateReminderMessage(payload: Partial<NotificationPayload>): string {
@@ -391,6 +393,7 @@ export class NotificationService {
     bookingCode: string;
   }): string {
     const { patientName, doctorName, appointmentDate, appointmentTime } = payload;
-    return `*INFO DOKTER CUTI*\n\nHalo ${patientName},\nDokter *${doctorName}* berhalangan hadir/cuti pada jadwal:\n${appointmentDate} | ${appointmentTime} WIB.\n\nKami mohon maaf. Silakan hubungi kami untuk reschedule.`;
+    const websiteUrl = this.configService.get('FRONTEND_URL') || 'https://rsisitihajarmataram.co.id';
+    return `*INFO DOKTER CUTI*\n\nHalo ${patientName},\nDokter *${doctorName}* berhalangan hadir/cuti pada jadwal:\n${appointmentDate} | ${appointmentTime} WIB.\n\nKami mohon maaf. Silakan cek jadwal dokter lain di: ${websiteUrl}/doctors atau hubungi kami untuk reschedule.`;
   }
 }

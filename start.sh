@@ -14,6 +14,6 @@ fi
 
 # Jalankan aplikasi utama
 echo "--- STARTING NESTJS APP ---"
-# Port otomatis dari Railway
-export PORT=${PORT:-2000}
+# Port dari environment atau default 2005
+export PORT=${PORT:-2005}
 exec npm run start:prod

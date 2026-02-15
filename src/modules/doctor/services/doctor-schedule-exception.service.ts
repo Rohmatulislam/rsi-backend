@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/infra/database/prisma.service';
+import { ConfigService } from '@nestjs/config';
 import { NotificationService } from 'src/modules/notification/notification.service';
 
 @Injectable()
@@ -9,6 +10,7 @@ export class DoctorScheduleExceptionService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly notificationService: NotificationService,
+        private readonly configService: ConfigService,
     ) { }
 
     async createException(data: {
@@ -97,11 +99,16 @@ export class DoctorScheduleExceptionService {
         for (const appt of appointments) {
             this.logger.log(`Processing appt ${appt.id} for patient ${appt.patientName} (${appt.patientPhone})`);
 
+            const websiteUrl = this.configService.get('FRONTEND_URL') || 'https://rsisitihajarmataram.co.id';
+            const scheduleUrl = `${websiteUrl}/doctors`;
+
             let message = '';
+            const dateStr = date.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
             if (type === 'LEAVE') {
-                message = `Mohon maaf, jadwal dr. ${appt.doctor.name} pada tanggal ${date.toLocaleDateString('id-ID')} DIBATALKAN/LIBUR karena ${note || 'halangan mendesak'}. Silakan lakukan reschedule atau hubungi kami.`;
+                message = `*PEMBERITAHUAN DOKTER LIBUR*\n\nHalo ${appt.patientName},\n\nMohon maaf, jadwal dr. ${appt.doctor.name} pada hari *${dateStr}* ditiadakan (LIBUR) dikarenakan *${note || 'halangan mendesak'}*.\n\nSilakan cek jadwal alternatif atau lakukan pendaftaran ulang di:\n${scheduleUrl}\n\nTerima kasih.`;
             } else if (type === 'RESCHEDULE') {
-                message = `Info: Jadwal dr. ${appt.doctor.name} pada tanggal ${date.toLocaleDateString('id-ID')} mengalami perubahan jam. Mohon cek kembali jadwal terbaru.`;
+                message = `*PERUBAHAN JADWAL DOKTER*\n\nHalo ${appt.patientName},\n\nKami menginformasikan bahwa jadwal dr. ${appt.doctor.name} pada hari *${dateStr}* mengalami perubahan (Reschedule) dikarenakan *${note || 'halangan mendesak'}*.\n\nMohon pastikan Anda mengecek jam praktek terbaru di website kami:\n${scheduleUrl}\n\nTerima kasih.`;
             }
 
             if (message && appt.patientPhone) {
