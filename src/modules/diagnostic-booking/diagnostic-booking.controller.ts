@@ -23,4 +23,13 @@ export class DiagnosticBookingController {
     async getOrder(@Param('id') id: string) {
         return this.service.findOrderById(id);
     }
+
+    @Post('orders/:id/payment')
+    async createPaymentToken(@Param('id') id: string) {
+        try {
+            return await this.service.createPaymentToken(id);
+        } catch (error: any) {
+            throw new BadRequestException(error.message);
+        }
+    }
 }

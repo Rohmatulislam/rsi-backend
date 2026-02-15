@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaService } from '../../infra/database/khanza.service';
 import { PrismaService } from '../../infra/database/prisma.service';
+import { PaymentService } from '../payment/payment.service';
 
 @Injectable()
 export class DiagnosticBookingService {
@@ -8,7 +9,8 @@ export class DiagnosticBookingService {
 
     constructor(
         private readonly khanza: KhanzaService,
-        private readonly prisma: PrismaService
+        private readonly prisma: PrismaService,
+        private readonly paymentService: PaymentService
     ) { }
 
     private generateOrderNumber() {
@@ -134,11 +136,55 @@ export class DiagnosticBookingService {
 
         return {
             success: true,
+            id: order?.id,
             patient: patientData.nm_pasien,
             no_rm: patientData.no_rkm_medis,
             orderNumber: order?.orderNumber,
             bookings: results
         };
+    }
+
+    async createPaymentToken(id: string) {
+        const order = await this.prisma.diagnosticOrder.findUnique({
+            where: { id },
+            include: { items: true }
+        });
+
+        if (!order) {
+            throw new Error('Order tidak ditemukan');
+        }
+
+        if (order.paymentStatus === 'PAID') {
+            throw new Error('Order sudah lunas');
+        }
+
+        if (order.snapToken) {
+            return { token: order.snapToken };
+        }
+
+        const transaction = await this.paymentService.createTransaction({
+            orderId: order.orderNumber,
+            grossAmount: order.totalAmount,
+            customerDetails: {
+                firstName: order.patientName,
+                email: order.patientEmail || undefined,
+                phone: order.patientPhone || undefined,
+            },
+            itemDetails: order.items.map(item => ({
+                id: item.itemId,
+                price: item.price,
+                quantity: 1,
+                name: item.name,
+                category: item.type
+            }))
+        });
+
+        await this.prisma.diagnosticOrder.update({
+            where: { id },
+            data: { snapToken: transaction.token }
+        });
+
+        return transaction;
     }
 
     async findAllOrders() {

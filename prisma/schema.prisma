@@ -492,6 +492,7 @@ model DiagnosticOrder {
   paymentStatus PaymentStatus         @default(UNPAID)
   paymentMethod String?
   paymentId     String? // Midtrans ID reference
+  snapToken     String? // Midtrans Snap Token
   notes         String?
   createdAt     DateTime              @default(now())
   updatedAt     DateTime              @updatedAt
