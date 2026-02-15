@@ -54,22 +54,22 @@ export class DoctorController {
   }
 
   @Post('sync')
-  @AllowAnonymous() // For now allow anonymous or secure it
+  @UseGuards(AdminGuard)
   sync() {
     return this.doctorService.syncDoctors();
   }
 
-  @Post('match-codes')
-  @AllowAnonymous() // Auto-match local doctors with Khanza codes
-  matchCodes() {
-    return this.doctorService.matchDoctorCodes();
-  }
+  // @Post('match-codes')
+  // @UseGuards(AdminGuard)
+  // matchCodes() {
+  //   return this.doctorService.matchDoctorCodes();
+  // }
 
-  @Post('cleanup-duplicates')
-  @AllowAnonymous() // Remove doctors without kd_dokter
-  cleanupDuplicates() {
-    return this.doctorService.cleanupDuplicates();
-  }
+  // @Post('cleanup-duplicates')
+  // @UseGuards(AdminGuard)
+  // cleanupDuplicates() {
+  //   return this.doctorService.cleanupDuplicates();
+  // }
 
   @Get('health/khanza')
   @AllowAnonymous() // For diagnostic purposes

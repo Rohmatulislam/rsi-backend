@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infra/database/prisma.service';
-import axios from 'axios';
 import * as nodemailer from 'nodemailer';
+import { Twilio } from 'twilio';
 
 export interface NotificationPayload {
   patientName: string;
@@ -18,9 +18,9 @@ export interface NotificationPayload {
 @Injectable()
 export class NotificationService {
   private readonly logger = new Logger(NotificationService.name);
-  private readonly fonntteApiUrl = 'https://api.fonnte.com/send';
-  private readonly fonttneToken: string;
+  private twilioClient: Twilio;
   private readonly whatsappEnabled: boolean;
+  private readonly twilioPhoneNumber: string;
   private readonly transporter: nodemailer.Transporter;
   private readonly emailFrom: string;
 
@@ -28,13 +28,18 @@ export class NotificationService {
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
   ) {
-    this.fonttneToken = this.configService.get('FONNTE_TOKEN') || '';
-    this.whatsappEnabled = !!this.fonttneToken;
+    // Initialize Twilio
+    const accountSid = this.configService.get('TWILIO_ACCOUNT_SID');
+    const authToken = this.configService.get('TWILIO_AUTH_TOKEN');
+    this.twilioPhoneNumber = this.configService.get('TWILIO_WHATSAPP_NUMBER');
 
-    if (this.whatsappEnabled) {
-      this.logger.log('✅ WhatsApp notification enabled via Fonnte');
+    if (accountSid && authToken && this.twilioPhoneNumber) {
+      this.twilioClient = new Twilio(accountSid, authToken);
+      this.whatsappEnabled = true;
+      this.logger.log('✅ Twilio WhatsApp notification enabled');
     } else {
-      this.logger.warn('⚠️ WhatsApp notification disabled - FONNTE_TOKEN not configured');
+      this.whatsappEnabled = false;
+      this.logger.warn('⚠️ WhatsApp notification disabled - Twilio credentials missing');
     }
 
     // Initialize Email Transporter
@@ -52,7 +57,7 @@ export class NotificationService {
     this.logger.log('📧 Email notification service initialized');
   }
 
-  // Format phone number for WhatsApp (remove leading 0, add 62)
+  // Format phone number for Twilio WhatsApp (must be E.164, e.g., +628123456789)
   private formatPhoneNumber(phone: string): string {
     if (!phone) return '';
 
@@ -69,10 +74,11 @@ export class NotificationService {
       cleaned = '62' + cleaned;
     }
 
-    return cleaned;
+    // Twilio needs "whatsapp:+" prefix
+    return `whatsapp:+${cleaned}`;
   }
 
-  // Send WhatsApp message via Fonnte
+  // Send WhatsApp message via Twilio
   private async sendWhatsApp(phone: string, message: string): Promise<boolean> {
     const formattedPhone = this.formatPhoneNumber(phone);
 
@@ -82,29 +88,16 @@ export class NotificationService {
     }
 
     try {
-      const response = await axios.post(
-        this.fonntteApiUrl,
-        {
-          target: formattedPhone,
-          message: message,
-          countryCode: '62',
-        },
-        {
-          headers: {
-            Authorization: this.fonttneToken,
-          },
-        }
-      );
+      const response = await this.twilioClient.messages.create({
+        body: message,
+        from: this.twilioPhoneNumber,
+        to: formattedPhone
+      });
 
-      if (response.data?.status) {
-        this.logger.log(`✅ WhatsApp sent to ${formattedPhone}`);
-        return true;
-      } else {
-        this.logger.warn(`⚠️ WhatsApp send failed: ${JSON.stringify(response.data)}`);
-        return false;
-      }
+      this.logger.log(`✅ WhatsApp sent to ${formattedPhone} (SID: ${response.sid})`);
+      return true;
     } catch (error) {
-      this.logger.error(`❌ WhatsApp send error: ${error.message}`);
+      this.logger.error(`❌ Twilio WhatsApp send error: ${error.message}`);
       return false;
     }
   }
@@ -139,38 +132,6 @@ export class NotificationService {
     }
   }
 
-  // Internal send email (for backward compatibility)
-  private async sendEmailInternal(to: string, subject: string, message: string): Promise<boolean> {
-    if (!to) return false;
-
-    try {
-      await this.transporter.sendMail({
-        from: this.emailFrom,
-        to,
-        subject,
-        text: message.replace(/[*_]/g, ''), // Strip markdown simple formatting for text version
-        html: `
-          <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #eee; border-radius: 10px; overflow: hidden;">
-            <div style="background-color: #0b1e33; color: white; padding: 20px; text-align: center;">
-              <h1 style="margin: 0;">RSI Hospital</h1>
-            </div>
-            <div style="padding: 30px;">
-              ${message.split('\n').map(line => line.trim() ? `<p style="margin: 10px 0;">${line}</p>` : '<br/>').join('')}
-            </div>
-            <div style="background-color: #f9f9f9; color: #777; padding: 15px; text-align: center; font-size: 12px; border-top: 1px solid #eee;">
-              Pesan ini dikirim otomatis oleh sistem RSI Hospital
-            </div>
-          </div>
-        `
-      });
-      this.logger.log(`✅ Email sent to ${to}`);
-      return true;
-    } catch (error) {
-      this.logger.error(`❌ Email send error: ${error.message}`);
-      return false;
-    }
-  }
-
   async sendBookingConfirmation(payload: NotificationPayload, appointmentId?: string): Promise<void> {
     const { patientName, patientPhone, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
 
@@ -185,7 +146,6 @@ export class NotificationService {
 
     const sent = await this.sendWhatsApp(patientPhone, message);
 
-    // Log the notification
     await this.prisma.notification.create({
       data: {
         type: 'BOOKING_CONFIRMATION',
@@ -214,7 +174,6 @@ export class NotificationService {
 
     const sent = await this.sendWhatsApp(patientPhone, message);
 
-    // Log the notification
     await this.prisma.notification.create({
       data: {
         type: 'BOOKING_CANCELLATION',
@@ -245,7 +204,6 @@ export class NotificationService {
 
     const sent = await this.sendWhatsApp(patientPhone, message);
 
-    // Log the notification
     await this.prisma.notification.create({
       data: {
         type: 'BOOKING_RESCHEDULE',
@@ -279,10 +237,8 @@ export class NotificationService {
       bookingCode
     });
 
-    // Send via WhatsApp
     const whatsappSent = await this.sendWhatsApp(patientPhone, message);
 
-    // Send via Email if available
     let emailSent = false;
     if (patientEmail) {
       emailSent = await this.sendEmail({
@@ -292,7 +248,6 @@ export class NotificationService {
       });
     }
 
-    // Log the notification
     await this.prisma.notification.create({
       data: {
         type: 'DOCTOR_LEAVE_NOTICE',
@@ -322,7 +277,6 @@ export class NotificationService {
 
     const sent = await this.sendWhatsApp(patientPhone, message);
 
-    // Log the notification
     await this.prisma.notification.create({
       data: {
         type: 'BOOKING_REMINDER',
@@ -351,7 +305,6 @@ export class NotificationService {
 
     const sent = await this.sendWhatsApp(patientPhone, message);
 
-    // Log the notification
     await this.prisma.notification.create({
       data: {
         type: 'SCHEDULE_CHANGE_NOTICE',
@@ -367,143 +320,35 @@ export class NotificationService {
     return { whatsapp: sent };
   }
 
-  // Message Templates
+  // Twilio Templates (Minimalist/Clean for official template approval if needed later)
+  // For sandbox/basic use, simple text is fine.
+
   private generateBookingConfirmationMessage(payload: Partial<NotificationPayload>): string {
     const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
-    return `🏥 *RSI Hospital*
-━━━━━━━━━━━━━━━━━
-✅ *KONFIRMASI BOOKING*
-━━━━━━━━━━━━━━━━━
-
-Halo *${patientName}*,
-
-Booking Anda telah berhasil! Berikut detailnya:
-
-📋 *Detail Booking*
-• Kode: *${bookingCode}*
-• Dokter: *${doctorName}*
-• Poli: *${poliName}*
-• Tanggal: *${bookingDate}*
-• Jam: *${bookingTime}* WIB
-
-📌 *Catatan Penting*
-• Harap datang 15 menit sebelum jadwal
-• Bawa KTP/kartu identitas
-• Bawa kartu BPJS (jika peserta)
-
-Terima kasih telah mempercayakan kesehatan Anda kepada kami. 🙏
-
-_Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
+    return `*KONFIRMASI BOOKING RSI*\n\nHalo ${patientName},\nBooking Anda terkonfirmasi.\n\nKode: *${bookingCode}*\nDokter: ${doctorName}\nPoli: ${poliName}\nJadwal: ${bookingDate} | ${bookingTime} WIB\n\nMohon datang 15 menit sebelum jadwal.`;
   }
 
   private generateCancellationMessage(payload: Partial<NotificationPayload>): string {
     const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
-    return `🏥 *RSI Hospital*
-━━━━━━━━━━━━━━━━━
-❌ *PEMBATALAN BOOKING*
-━━━━━━━━━━━━━━━━━
-
-Halo *${patientName}*,
-
-Booking Anda telah *dibatalkan*.
-
-📋 *Detail Booking yang Dibatalkan*
-• Kode: *${bookingCode}*
-• Dokter: *${doctorName}*
-• Poli: *${poliName}*
-• Tanggal: *${bookingDate}*
-• Jam: *${bookingTime}* WIB
-
-Jika ini kesalahan, silakan buat booking baru melalui website kami.
-
-Terima kasih. 🙏
-
-_Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
+    return `*PEMBATALAN BOOKING RSI*\n\nHalo ${patientName},\nBooking Anda berikut telah DIBATALKAN:\n\nKode: ${bookingCode}\nDokter: ${doctorName}\nPoli: ${poliName}\nJadwal: ${bookingDate} | ${bookingTime} WIB\n\nSilakan buat booking baru jika diperlukan.`;
   }
 
   private generateRescheduleMessage(payload: any): string {
     const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName, newDate, newTime } = payload;
-    return `🏥 *RSI Hospital*
-━━━━━━━━━━━━━━━━━
-🔄 *PERUBAHAN JADWAL*
-━━━━━━━━━━━━━━━━━
-
-Halo *${patientName}*,
-
-Jadwal booking Anda telah *diubah*.
-
-📋 *Jadwal Lama*
-• Tanggal: ${bookingDate}
-• Jam: ${bookingTime} WIB
-
-📋 *Jadwal Baru*
-• Kode: *${bookingCode}*
-• Dokter: *${doctorName}*
-• Poli: *${poliName}*
-• Tanggal: *${newDate}*
-• Jam: *${newTime}* WIB
-
-📌 *Catatan*
-Harap datang 30 menit sebelum jadwal baru.
-
-Terima kasih. 🙏
-
-_Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
+    return `*PERUBAHAN JADWAL RSI*\n\nHalo ${patientName},\nJadwal Anda berubah.\n\nJadwal BARU:\nTanggal: *${newDate}*\nJam: *${newTime}* WIB\n\n(Booking Awal: ${bookingDate} ${bookingTime})\nDokter: ${doctorName}`;
   }
 
   private generateScheduleChangeMessage(payload: any): string {
     const { patientName, doctorName, dayName, newTime, poliName, type } = payload;
-
     let changeText = `terdapat perubahan jam praktek`;
-    if (type === 'deleted') {
-      changeText = `jadwal praktek ditiadakan/dihapus`;
-    }
+    if (type === 'deleted') changeText = `jadwal praktek ditiadakan`;
 
-    return `🏥 *RSI Siti Hajar Mataram*
-━━━━━━━━━━━━━━━━━
-📢 *PENGUMUMAN PERUBAHAN JADWAL*
-━━━━━━━━━━━━━━━━━
-
-Halo *${patientName}*,
-
-Kami menginformasikan bahwa untuk hari *${dayName}*, ${changeText} untuk:
-
-• Dokter: *${doctorName}*
-• Poli: *${poliName}*
-${type === 'modified' ? `• Jam Baru: *${newTime}* WIB` : ''}
-
-Mohon maaf atas ketidaknyamanannya. Jika Anda ingin melakukan pendaftaran ulang atau konsultasi lebih lanjut, silakan hubungi kami atau cek jadwal terbaru di website.
-
-Terima kasih. 🙏
-_Pesan otomatis RSI Siti Hajar_`;
+    return `*INFO JADWAL DOKTER*\n\nHalo ${patientName},\nUntuk hari *${dayName}*, ${changeText} dokter:\n\nNama: ${doctorName}\nPoli: ${poliName}\n${type === 'modified' ? `Jam Baru: ${newTime} WIB` : ''}\n\nMohon cek website untuk jadwal update.`;
   }
 
   private generateReminderMessage(payload: Partial<NotificationPayload>): string {
-    const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
-    return `🏥 *RSI Hospital*
-━━━━━━━━━━━━━━━━━
-⏰ *PENGINGAT JADWAL*
-━━━━━━━━━━━━━━━━━
-
-Halo *${patientName}*,
-
-Ini adalah pengingat untuk jadwal pemeriksaan Anda *besok*.
-
-📋 *Detail Jadwal*
-• Kode: *${bookingCode}*
-• Dokter: *${doctorName}*
-• Poli: *${poliName}*
-• Tanggal: *${bookingDate}*
-• Jam: *${bookingTime}* WIB
-
-📌 *Persiapan*
-• Harap datang 30 menit sebelum jadwal
-• Bawa KTP/kartu identitas
-• Bawa kartu BPJS (jika peserta)
-
-Sampai jumpa! 👋
-
-_Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
+    const { patientName, bookingDate, bookingTime, doctorName, bookingCode } = payload;
+    return `*PENGINGAT JADWAL RSI*\n\nHalo ${patientName},\nIngat jadwal periksa Anda BESOK.\n\nKode: ${bookingCode}\nDokter: ${doctorName}\nJam: ${bookingTime} WIB\n\nDatang tepat waktu ya!`;
   }
 
   private generateDoctorLeaveMessage(payload: {
@@ -513,29 +358,7 @@ _Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
     appointmentTime: string;
     bookingCode: string;
   }): string {
-    const { patientName, doctorName, appointmentDate, appointmentTime, bookingCode } = payload;
-    return `🏥 *RSI Hospital*
-━━━━━━━━━━━━━━━━━
-📢 *PEMBERITAHUAN DOKTER CUTI*
-━━━━━━━━━━━━━━━━━
-
-Halo *${patientName}*,
-
-Kami menginformasikan bahwa *${doctorName}* saat ini sedang berhalangan/cuti.
-
-📋 *Detail Jadwal Terdampak*
-• Kode Booking: *${bookingCode}*
-• Tanggal: *${appointmentDate}*
-• Jam: *${appointmentTime}*
-
-⚠️ *Tindakan Selanjutnya*
-Jadwal pemeriksaan Anda kemungkinan akan mengalami perubahan. Tim kami akan segera menghubungi Anda, atau Anda dapat:
-1. Menghubungi pendaftaran via WhatsApp/Telepon.
-2. Melakukan perubahan jadwal (reschedule) via dashboard riwayat booking.
-3. Melakukan booking dengan dokter lain di poli yang sama.
-
-Mohon maaf atas ketidaknyamanan ini. Terima kasih atas pengertiannya. 🙏
-
-_Pesan ini dikirim otomatis oleh sistem RSI Hospital_`;
+    const { patientName, doctorName, appointmentDate, appointmentTime } = payload;
+    return `*INFO DOKTER CUTI*\n\nHalo ${patientName},\nDokter *${doctorName}* berhalangan hadir/cuti pada jadwal:\n${appointmentDate} | ${appointmentTime} WIB.\n\nKami mohon maaf. Silakan hubungi kami untuk reschedule.`;
   }
 }

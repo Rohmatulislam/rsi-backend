@@ -186,6 +186,31 @@ export class AppointmentService {
       throw new BadRequestException('Pasien tidak valid');
     }
 
+    // 1.1 Check for duplicate booking (Same Patient + Same Doctor + Same Date)
+    // Prevent double booking unless previous one was cancelled
+    const startOfDay = new Date(bookingDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date(bookingDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const duplicateBooking = await this.prisma.appointment.findFirst({
+      where: {
+        patientId: patient.no_rkm_medis,
+        doctorId: doctor.id,
+        appointmentDate: {
+          gte: startOfDay,
+          lte: endOfDay
+        },
+        status: {
+          notIn: ['cancelled', 'CANCELLED']
+        }
+      }
+    });
+
+    if (duplicateBooking) {
+      throw new BadRequestException(`Anda sudah terdaftar untuk Dr. ${doctor.name} pada tanggal ${createAppointmentDto.bookingDate}. Silakan cek riwayat Anda.`);
+    }
+
     // Lookup Poli
     let poliCode = '';
 
@@ -252,26 +277,42 @@ export class AppointmentService {
         this.logger.warn(`Failed to fetch payer name for ${createAppointmentDto.paymentType}`);
       }
 
-      const appointment = await this.prisma.appointment.create({
-        data: {
-          patientId: patient.no_rkm_medis,
-          doctorId: doctor.id,
-          appointmentDate: appointmentDateTime,
-          status: 'scheduled',
-          reason: reason,
-          noRawat: bookingResult.no_rawat,
-          noReg: bookingResult.no_reg,
-          poliCode: poliCode,
-          payerName: payerName,
-          payerCode: createAppointmentDto.paymentType,
-          notes: `No Reg: ${bookingResult.no_reg}, No Rawat: ${bookingResult.no_rawat}`,
-          patientName: finalPatientName,
-          patientPhone: finalPatientPhone,
-          patientEmail: finalPatientEmail,
-          patientAddress: finalPatientAddress,
-          createdByUserId: createAppointmentDto.createdByUserId || null
-        } as any
+      // Check if appointment already exists in local DB to avoid Unique Constraint Check
+      const existingAppointment = await this.prisma.appointment.findUnique({
+        where: { noRawat: bookingResult.no_rawat }
       });
+
+      let appointment;
+      const appointmentData = {
+        patientId: patient.no_rkm_medis,
+        doctorId: doctor.id,
+        appointmentDate: appointmentDateTime,
+        status: 'scheduled',
+        reason: reason,
+        noRawat: bookingResult.no_rawat, // Ensure this matches found/created
+        noReg: bookingResult.no_reg,
+        poliCode: poliCode,
+        payerName: payerName,
+        payerCode: createAppointmentDto.paymentType,
+        notes: `No Reg: ${bookingResult.no_reg}, No Rawat: ${bookingResult.no_rawat}`,
+        patientName: finalPatientName,
+        patientPhone: finalPatientPhone,
+        patientEmail: finalPatientEmail,
+        patientAddress: finalPatientAddress,
+        createdByUserId: createAppointmentDto.createdByUserId || null
+      };
+
+      if (existingAppointment) {
+        this.logger.warn(`Appointment with noRawat ${bookingResult.no_rawat} already exists in local DB. Updating it.`);
+        appointment = await this.prisma.appointment.update({
+          where: { id: existingAppointment.id },
+          data: appointmentData as any
+        });
+      } else {
+        appointment = await this.prisma.appointment.create({
+          data: appointmentData as any
+        });
+      }
 
       // 4. Send booking confirmation notification
       try {

@@ -333,9 +333,20 @@ export class DoctorService {
               schedulesToCreate.push(scheduleData);
 
               // Check if modification occurred (different time or different poli for same day)
+              // Comparison needs to be robust against "16:00:00" vs "16:00"
+              const normalizeTime = (t: string) => t ? t.substring(0, 5) : '';
+
               const existingOnDay = existingSchedules.find((es: any) => es.dayOfWeek === dayInt && (es.kd_poli === sched.kd_poli || !es.kd_poli));
+
               if (existingOnDay) {
-                if ((existingOnDay as any).startTime !== sched.jam_mulai || (existingOnDay as any).endTime !== sched.jam_selesai) {
+                const existingStart = normalizeTime((existingOnDay as any).startTime);
+                const existingEnd = normalizeTime((existingOnDay as any).endTime);
+                const newStart = normalizeTime(sched.jam_mulai);
+                const newEnd = normalizeTime(sched.jam_selesai);
+
+                if (existingStart !== newStart || existingEnd !== newEnd) {
+                  // Only log if real change
+                  // this.logger.debug(`[DIFF] ${doc.nm_dokter} Day ${dayInt}: ${existingStart}-${existingEnd} vs ${newStart}-${newEnd}`);
                   changedSchedules.push({ dayOfWeek: dayInt, kd_poli: sched.kd_poli, type: 'modified' });
                 }
               }
@@ -343,6 +354,8 @@ export class DoctorService {
               // 4. Link to Category (Poli)
               const poli = kPolis.find(p => p.kd_poli === sched.kd_poli);
               if (poli) {
+
+
                 const poliSlug = poli.nm_poli.toLowerCase().replace(/[^a-z0-9]+/g, '-');
                 let categoryId = categoryCache.get(poliSlug);
 
@@ -392,8 +405,8 @@ export class DoctorService {
 
           // Trigger notifications if changes detected
           if (changedSchedules.length > 0) {
-            this.logger.log(`📢 Detected ${changedSchedules.length} schedule changes for ${doc.nm_dokter}. Triggering notifications...`);
-            // Run in background
+            // Check if we actually have patients to notify before making a fuss
+            // This prevents "Notifying 0 patients" noise
             this.handleScheduleChangeNotifications(savedDoctor.id, doc.kd_dokter, doc.nm_dokter, changedSchedules).catch(err => {
               this.logger.error(`Error sending schedule change notifications for ${doc.kd_dokter}`, err);
             });
@@ -548,6 +561,7 @@ export class DoctorService {
                 dayOfWeek: true,
                 startTime: true,
                 endTime: true,
+                kd_poli: true, // Added: Include poli code for admin display
               }
             },
             categories: {
@@ -570,6 +584,8 @@ export class DoctorService {
         // Enhance doctors with schedule information from Khanza including poli info
         const enhancedDoctors = doctors.map((doctor: any) => {
           const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
+
+
 
           return {
             ...doctor,
