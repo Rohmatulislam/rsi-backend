@@ -106,9 +106,9 @@ export class DoctorScheduleExceptionService {
             const dateStr = date.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
             if (type === 'LEAVE') {
-                message = `*PEMBERITAHUAN DOKTER LIBUR*\n\nHalo ${appt.patientName},\n\nMohon maaf, jadwal dr. ${appt.doctor.name} pada hari *${dateStr}* ditiadakan (LIBUR) dikarenakan *${note || 'halangan mendesak'}*.\n\nSilakan cek jadwal alternatif atau lakukan pendaftaran ulang di:\n${scheduleUrl}\n\nTerima kasih.`;
+                message = `*INFORMASI PELAYANAN DOKTER - RSI SITI HAJAR*\n\nSalam Sejahtera Bapak/Ibu ${appt.patientName},\n\nKami memohon maaf atas ketidaknyamanan Anda. Melalui pesan ini, kami menginformasikan bahwa jadwal praktik dr. ${appt.doctor.name} pada hari *${dateStr}* ditiadakan sementara dikarenakan *${note || 'keperluan mendesak'}*.\n\nBapak/Ibu dapat meninjau jadwal alternatif atau melakukan pendaftaran kembali melalui tautan berikut:\n${scheduleUrl}\n\nTerima kasih atas pengertian dan kerja sama Bapak/Ibu.`;
             } else if (type === 'RESCHEDULE') {
-                message = `*PERUBAHAN JADWAL DOKTER*\n\nHalo ${appt.patientName},\n\nKami menginformasikan bahwa jadwal dr. ${appt.doctor.name} pada hari *${dateStr}* mengalami perubahan (Reschedule) dikarenakan *${note || 'halangan mendesak'}*.\n\nMohon pastikan Anda mengecek jam praktek terbaru di website kami:\n${scheduleUrl}\n\nTerima kasih.`;
+                message = `*INFORMASI PENYESUAIAN JADWAL PRAKTIK - RSI SITI HAJAR*\n\nSalam Sejahtera Bapak/Ibu ${appt.patientName},\n\nKami menginformasikan bahwa terdapat penyesuaian waktu praktik untuk dr. ${appt.doctor.name} pada hari *${dateStr}* dikarenakan *${note || 'keperluan mendesak'}*.\n\nMohon kesediaan Bapak/Ibu untuk memeriksa kembali jadwal pelayanan terbaru melalui website resmi kami agar mendapatkan estimasi waktu yang akurat:\n${scheduleUrl}\n\nTerima kasih atas kepercayaan Bapak/Ibu.`;
             }
 
             if (message && appt.patientPhone) {
