@@ -19,10 +19,14 @@ import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
 import { GetDoctorsDto } from './dto/get-doctors.dto';
 import { UseGuards } from '@nestjs/common';
 import { AdminGuard } from '../auth/guards/admin.guard';
+import { DoctorScheduleExceptionService } from './services/doctor-schedule-exception.service';
 
 @Controller('doctors')
 export class DoctorController {
-  constructor(private readonly doctorService: DoctorService) { }
+  constructor(
+    private readonly doctorService: DoctorService,
+    private readonly exceptionService: DoctorScheduleExceptionService
+  ) { }
 
   @Get('active-poli')
   @AllowAnonymous()
@@ -144,5 +148,25 @@ export class DoctorController {
   @UseGuards(AdminGuard)
   removeSchedule(@Param('id') id: string) {
     return this.doctorService.removeSchedule(id);
+  }
+
+  // --- Schedule Exceptions ---
+
+  @Post('exceptions')
+  @UseGuards(AdminGuard)
+  createException(@Body() data: any) {
+    return this.exceptionService.createException(data);
+  }
+
+  @Get('exceptions/:doctorId')
+  @UseGuards(AdminGuard)
+  getExceptions(@Param('doctorId') doctorId: string) {
+    return this.exceptionService.getExceptionsByDoctor(doctorId);
+  }
+
+  @Delete('exceptions/:id')
+  @UseGuards(AdminGuard)
+  deleteException(@Param('id') id: string) {
+    return this.exceptionService.deleteException(id);
   }
 }

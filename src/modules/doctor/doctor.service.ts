@@ -12,6 +12,7 @@ import { getTodayFormatted } from 'src/infra/utils/date.utils';
 import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { AppointmentSyncService } from '../appointment/appointment-sync.service';
+import { DoctorScheduleExceptionService } from './services/doctor-schedule-exception.service';
 
 @Injectable()
 export class DoctorService {
@@ -24,6 +25,7 @@ export class DoctorService {
     private readonly fileUploadService: FileUploadService,
     private readonly notificationService: NotificationService,
     private readonly appointmentSync: AppointmentSyncService,
+    private readonly exceptionService: DoctorScheduleExceptionService,
   ) { }
 
   async create(createDoctorDto: CreateDoctorDto) {
@@ -881,15 +883,53 @@ export class DoctorService {
         const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter as any);
 
         if (kSchedules && kSchedules.length > 0) {
-          const scheduleDetails = kSchedules.map(schedule => ({
-            kd_poli: schedule.kd_poli,
-            nm_poli: schedule.nm_poli,
-            hari_kerja: schedule.hari_kerja,
-            jam_mulai: schedule.jam_mulai,
-            jam_selesai: schedule.jam_selesai,
-            kuota: schedule.kuota,
-            consultation_fee: schedule.registrasi || 0,
-          }));
+          // Fetch today's date for exception checking
+          const nowDate = new Date();
+          const next7Days = new Array(7).fill(0).map((_, i) => {
+            const d = new Date(nowDate);
+            d.setDate(nowDate.getDate() + i);
+            return d;
+          });
+
+          // Get exceptions
+          const exceptions = await this.exceptionService.getExceptionsByDoctor(
+            (doctor as any).id,
+            nowDate,
+            next7Days[6]
+          );
+
+          const scheduleDetails = kSchedules.map(schedule => {
+            const daysKey = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+            const todayIndex = new Date().getDay();
+            const todayName = daysKey[todayIndex];
+            const isToday = schedule.hari_kerja === todayName || (todayName === 'MINGGU' && schedule.hari_kerja === 'AKHAD');
+
+            let status = 'AVAILABLE';
+            let note = '';
+
+            if (isToday) {
+              const todayException = exceptions.find(e =>
+                e.date.toISOString().split('T')[0] === nowDate.toISOString().split('T')[0]
+              );
+
+              if (todayException?.type === 'LEAVE') {
+                status = 'LEAVE';
+                note = todayException.note || 'Dokter Cuti';
+              }
+            }
+
+            return {
+              kd_poli: schedule.kd_poli,
+              nm_poli: schedule.nm_poli,
+              hari_kerja: schedule.hari_kerja,
+              jam_mulai: schedule.jam_mulai,
+              jam_selesai: schedule.jam_selesai,
+              kuota: schedule.kuota,
+              consultation_fee: schedule.registrasi || 0,
+              status,
+              note
+            };
+          });
 
           return {
             ...doctor,
@@ -1111,8 +1151,49 @@ export class DoctorService {
             return acc;
           }, {} as Record<string, number>);
 
-          const scheduleDetails = kSchedules.map(schedule => {
+          // Fetch today's date for exception checking
+          const nowDate = new Date();
+          const next7Days = new Array(7).fill(0).map((_, i) => {
+            const d = new Date(nowDate);
+            d.setDate(nowDate.getDate() + i);
+            return d;
+          });
+
+          // Get exceptions for the next 7 days for this doctor
+          const exceptions = await this.exceptionService.getExceptionsByDoctor(
+            (doctor as any).id,
+            nowDate,
+            next7Days[6]
+          );
+
+          // Map Khansa schedules
+          let scheduleDetails = kSchedules.map(schedule => {
             const isToday = schedule.hari_kerja === today || (today === 'MINGGU' && schedule.hari_kerja === 'AKHAD');
+
+            // Check if there is an exception for today ONLY if this schedule is for today
+            // Note: This logic is tricky because Khanza schedule is weekly, but exception is by DATE.
+            // We need to match the specific date of this schedule occurrence.
+            // For now, let's just check if TODAY has an exception if isToday is true.
+
+            let status = 'AVAILABLE';
+            let note = '';
+
+            if (isToday) {
+              const todayException = exceptions.find(e =>
+                e.date.toISOString().split('T')[0] === nowDate.toISOString().split('T')[0]
+              );
+
+              if (todayException) {
+                if (todayException.type === 'LEAVE') {
+                  status = 'LEAVE';
+                  note = todayException.note || 'Dokter Cuti';
+                } else if (todayException.type === 'RESCHEDULE') {
+                  // Update start/end time
+                  // This is complex for display. We might just mark it.
+                }
+              }
+            }
+
             return {
               kd_poli: schedule.kd_poli,
               nm_poli: schedule.nm_poli,
@@ -1123,10 +1204,14 @@ export class DoctorService {
               consultation_fee: schedule.registrasi || 0,
               isToday,
               todayQueueSize: queueCountMap[schedule.kd_poli] || 0,
+              status,
+              note
             };
           });
 
-          // Sort by: isToday first, then todayQueueSize (descending), then jam_mulai (earliest first)
+          // Filter out LEAVE schedules from display if desired, or keep them with status=LEAVE
+          // Keeping them allows frontend to show "Cuti Hari Ini" logic
+
           scheduleDetails.sort((a, b) => {
             // 1. Is it today?
             if (a.isToday && !b.isToday) return -1;
@@ -1250,7 +1335,30 @@ export class DoctorService {
       });
 
       // Filter by dayOfWeek
-      const affected = appointments.filter(appt => appt.appointmentDate.getDay() === change.dayOfWeek);
+      let affected = appointments.filter(appt => appt.appointmentDate.getDay() === change.dayOfWeek);
+
+      // Check for exceptions to avoid double notification
+      if (affected.length > 0) {
+        const uniqueDateStrings = [...new Set(affected.map(a => a.appointmentDate.toISOString().split('T')[0]))].sort();
+
+        try {
+          const potentialExceptions = await this.exceptionService.getExceptionsByDoctor(
+            doctorId,
+            new Date(uniqueDateStrings[0]),
+            new Date(uniqueDateStrings[uniqueDateStrings.length - 1])
+          );
+
+          affected = affected.filter(appt => {
+            const apptDateStr = appt.appointmentDate.toISOString().split('T')[0];
+            const hasException = potentialExceptions.some(e =>
+              e.date.toISOString().split('T')[0] === apptDateStr
+            );
+            return !hasException;
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to check exceptions for notification filter: ${err.message}`);
+        }
+      }
 
       this.logger.log(`📢 [SCHEDULE_CHANGE] Notifying ${affected.length} patients for dayOfWeek ${change.dayOfWeek} (${change.type})`);
 

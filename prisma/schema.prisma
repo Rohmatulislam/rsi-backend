@@ -35,6 +35,24 @@ model Doctor {
   appointments       Appointment[]
   schedules          Schedule[]
   categories         Category[]    @relation("DoctorCategory")
+  exceptions         DoctorScheduleException[]
+}
+
+model DoctorScheduleException {
+  id          String   @id @default(cuid())
+  doctorId    String
+  date        DateTime @db.Date
+  type        String   // 'LEAVE', 'RESCHEDULE', 'EXTRA_QUOTA'
+  startTime   String?  // If rescheduled
+  endTime     String?
+  note        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  doctor      Doctor   @relation(fields: [doctorId], references: [id])
+
+  @@unique([doctorId, date])
+  @@map("doctor_schedule_exceptions")
 }
 
 model Category {
@@ -455,5 +473,6 @@ model Budget {
   updatedAt DateTime @updatedAt
 
   @@unique([category, period, month, year])
-  @@map("budgets")
+  @@map("budget")
 }
+

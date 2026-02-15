@@ -80,7 +80,7 @@ export class NotificationService {
   }
 
   // Send WhatsApp message via Wablas
-  private async sendWhatsApp(phone: string, message: string): Promise<boolean> {
+  public async sendWhatsApp(phone: string, message: string): Promise<boolean> {
     const formattedPhone = this.formatPhoneNumber(phone);
 
     if (!this.wablasEnabled) {
