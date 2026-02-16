@@ -30,6 +30,19 @@ export class PatientService {
     return this.dbService.db('pasien').where('no_ktp', nik).first();
   }
 
+  async findNoRMByNIK(nik: string): Promise<string | null> {
+    try {
+      const patient = await this.dbService.db('pasien')
+        .where('no_ktp', nik)
+        .select('no_rkm_medis')
+        .first();
+      return patient ? patient.no_rkm_medis : null;
+    } catch (error) {
+      this.logger.error(`Error finding No RM for NIK ${nik}`, error);
+      return null;
+    }
+  }
+
   async createPatient(data: {
     name: string;
     nik: string;
@@ -307,23 +320,36 @@ export class PatientService {
 
   async getNextNoRM(): Promise<string> {
     try {
-      const lastPatient = await this.dbService.db('pasien')
-        .orderBy('no_rkm_medis', 'desc')
-        .first();
+      // Use numeric max to avoid lexicographical sort issues (e.g., '999999' > '1000000')
+      const result = await this.dbService.db('pasien')
+        .select(this.dbService.db.raw('MAX(CAST(no_rkm_medis AS UNSIGNED)) as max_rm'))
+        .first() as any;
 
       let nextNumber = 1;
-      if (lastPatient && lastPatient.no_rkm_medis) {
-        // Assuming format: 000001, 000002, etc.
-        const currentNumber = parseInt(lastPatient.no_rkm_medis);
-        if (!isNaN(currentNumber)) {
-          nextNumber = currentNumber + 1;
+      if (result && result.max_rm !== null && result.max_rm !== undefined) {
+        const currentMax = parseInt(result.max_rm.toString());
+        if (!isNaN(currentMax)) {
+          nextNumber = currentMax + 1;
+        }
+      } else {
+        // Fallback to existing logic if raw query fails
+        const lastPatient = await this.dbService.db('pasien')
+          .orderBy('no_rkm_medis', 'desc')
+          .first();
+
+        if (lastPatient && lastPatient.no_rkm_medis) {
+          const currentNumber = parseInt(lastPatient.no_rkm_medis);
+          if (!isNaN(currentNumber)) {
+            nextNumber = currentNumber + 1;
+          }
         }
       }
 
+      // Format to at least 6 digits (Khanza standard)
       return nextNumber.toString().padStart(6, '0');
     } catch (error) {
       this.logger.error('Error generating next No RM', error);
-      // Fallback to timestamp-based
+      // Fallback to timestamp-based as last resort
       return Date.now().toString().slice(-6);
     }
   }

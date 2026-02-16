@@ -14,6 +14,7 @@ export interface NotificationPayload {
   doctorName: string;
   bookingCode: string;
   poliName: string;
+  items?: string[]; // Added for diagnostic
 }
 
 @Injectable()
@@ -352,23 +353,104 @@ export class NotificationService {
     return { whatsapp: sent };
   }
 
-  // Twilio Templates (Minimalist/Clean for official template approval if needed later)
-  // For sandbox/basic use, simple text is fine.
+  async sendDiagnosticBookingConfirmation(payload: NotificationPayload, orderId?: string): Promise<void> {
+    const { patientName, patientPhone, bookingDate, bookingTime, bookingCode, items, poliName } = payload;
+
+    const message = this.generateDiagnosticConfirmationMessage({
+      patientName,
+      bookingDate,
+      bookingTime,
+      bookingCode,
+      items,
+      poliName
+    });
+
+    const sent = await this.sendWhatsApp(patientPhone, message);
+
+    await this.prisma.notification.create({
+      data: {
+        type: 'BOOKING_CONFIRMATION',
+        recipient: patientName || 'Unknown Patient',
+        recipientContact: this.formatPhoneNumber(patientPhone),
+        message: `Diagnostic booking confirmation for ${patientName}`,
+        status: sent ? 'sent' : 'failed',
+        // Optional: linking to diagnostic order if table exists/updated
+      }
+    });
+
+    this.logger.log(`Diagnostic confirmation ${sent ? 'sent' : 'logged'} for ${patientName}`);
+  }
+
+  // --- Premium Template Generators ---
 
   private generateBookingConfirmationMessage(payload: Partial<NotificationPayload>): string {
     const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
-    return `*KONFIRMASI BOOKING RSI*\n\nHalo ${patientName},\nBooking Anda terkonfirmasi.\n\nKode: *${bookingCode}*\nDokter: ${doctorName}\nPoli: ${poliName}\nJadwal: ${bookingDate} | ${bookingTime} WIB\n\nMohon datang 15 menit sebelum jadwal.`;
+    return `*KONFIRMASI PENDAFTARAN - RSI SITI HAJAR*\n\n` +
+      `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
+      `Pendaftaran pendaftaran Anda telah berhasil diproses oleh sistem kami. Berikut adalah rincian janji temu Anda:\n\n` +
+      `📌 *Detail Kunjungan:*\n` +
+      `🎫 Kode Booking: *${bookingCode}*\n` +
+      `👨‍⚕️ Dokter: ${doctorName}\n` +
+      `🏥 Poliklinik: ${poliName}\n` +
+      `🗓️ Tanggal: ${bookingDate}\n` +
+      `⏰ Waktu: ${bookingTime} WITA\n\n` +
+      `📍 *Petunjuk Kedatangan:*\n` +
+      `1. Silakan tiba 15 menit lebih awal dari jadwal yang ditentukan.\n` +
+      `2. Tunjukkan kode booking ini kepada petugas pendaftaran.\n` +
+      `3. Harap membawa identitas diri (KTP/NIK).\n\n` +
+      `Terima kasih telah mempercayai **RSI Siti Hajar Mataram** sebagai mitra kesehatan Anda.\n\n` +
+      `*Hormat Kami,*\n` +
+      `Manajemen RSI Siti Hajar`;
+  }
+
+  private generateDiagnosticConfirmationMessage(payload: Partial<NotificationPayload>): string {
+    const { patientName, bookingDate, bookingTime, bookingCode, items, poliName } = payload;
+    const itemList = items?.map(item => `   - ${item}`).join('\n') || '';
+
+    return `*KONFIRMASI LAYANAN DIAGNOSTIK - RSI SITI HAJAR*\n\n` +
+      `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
+      `Pendaftaran layanan diagnostik Anda telah terkonfirmasi. Kami siap melayani Anda pada jadwal berikut:\n\n` +
+      `📌 *Detail Layanan:*\n` +
+      `🎫 Kode Booking: *${bookingCode}*\n` +
+      `🏥 Layanan: ${poliName}\n` +
+      `🧪 Jenis Pemeriksaan:\n${itemList}\n` +
+      `🗓️ Tanggal: ${bookingDate}\n` +
+      `⏰ Waktu: ${bookingTime} WITA\n\n` +
+      `📍 *Informasi Penting:*\n` +
+      `1. Pastikan mengikuti instruksi persiapan (seperti puasa) jika diperlukan.\n` +
+      `2. Tiba 20 menit lebih awal untuk proses registrasi diagnostik.\n\n` +
+      `Kesehatan Anda adalah prioritas kami.\n\n` +
+      `*Hormat Kami,*\n` +
+      `Manajemen RSI Siti Hajar`;
   }
 
   private generateCancellationMessage(payload: Partial<NotificationPayload>): string {
-    const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
-    return `*PEMBATALAN BOOKING RSI*\n\nHalo ${patientName},\nBooking Anda berikut telah DIBATALKAN:\n\nKode: ${bookingCode}\nDokter: ${doctorName}\nPoli: ${poliName}\nJadwal: ${bookingDate} | ${bookingTime} WIB\n\nSilakan buat booking baru jika diperlukan.`;
+    const { patientName, bookingDate, doctorName, bookingCode } = payload;
+    return `*PEMBATALAN JANJI TEMU - RSI SITI HAJAR*\n\n` +
+      `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
+      `Melalui pesan ini, kami menginformasikan bahwa janji temu Anda telah resmi *DIBATALKAN*.\n\n` +
+      `📌 *Detail Pembatalan:*\n` +
+      `🎫 Kode Booking: ${bookingCode}\n` +
+      `👨‍⚕️ Dokter: ${doctorName}\n` +
+      `🗓️ Rencana Kunjungan: ${bookingDate}\n\n` +
+      `Jika pembatalan ini bukan atas permintaan Anda atau Anda ingin menjadwalkan ulang, silakan hubungi layanan pelanggan kami atau mendaftar kembali melalui website.\n\n` +
+      `Terima kasih atas pengertiannya.\n\n` +
+      `*Hormat Kami,*\n` +
+      `Pendaftaran Online RSI Siti Hajar`;
   }
 
   private generateRescheduleMessage(payload: any): string {
-    const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName, newDate, newTime } = payload;
-    const websiteUrl = this.configService.get('FRONTEND_URL') || 'https://rsisitihajarmataram.co.id';
-    return `*INFORMASI PENJADWALAN ULANG - RSI SITI HAJAR*\n\nSalam Sejahtera Bapak/Ibu ${patientName},\n\nKami menginformasikan adanya penyesuaian pada jadwal kunjungan Anda sebagai berikut:\n\n*Jadwal Baru:*\n🗓️ Tanggal: *${newDate}*\n⏰ Waktu: *${newTime}* WIB\n👨‍⚕️ Dokter: ${doctorName}\n\n(Data Sebelumnya: ${bookingDate} ${bookingTime})\n\nDetail lengkap dapat diakses melalui: ${websiteUrl}/doctors\n\nTerima kasih atas perhatian Bapak/Ibu.`;
+    const { patientName, doctorName, poliName, newDate, newTime } = payload;
+    return `*PENJADWALAN ULANG KUNJUNGAN - RSI SITI HAJAR*\n\n` +
+      `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
+      `Kami menginformasikan adanya pembaruan jadwal untuk janji temu Anda. Mohon diperhatikan rincian terbaru berikut:\n\n` +
+      `📌 *Jadwal Terbaru:*\n` +
+      `🗓️ Tanggal: *${newDate}*\n` +
+      `⏰ Waktu: *${newTime}* WITA\n` +
+      `👨‍⚕️ Dokter: ${doctorName}\n` +
+      `🏥 Poliklinik: ${poliName}\n\n` +
+      `Kami memohon maaf atas perubahan ini dan sangat menghargai fleksibilitas Anda demi pelayanan yang maksimal.\n\n` +
+      `Terima kasih.`;
   }
 
   private generateScheduleChangeMessage(payload: any): string {
@@ -376,13 +458,31 @@ export class NotificationService {
     let changeText = `mengalami penyesuaian jam praktik`;
     if (type === 'deleted') changeText = `ditiadakan sementara`;
 
-    const websiteUrl = this.configService.get('FRONTEND_URL') || 'https://rsisitihajarmataram.co.id';
-    return `*UPDATE JADWAL LAYANAN DOKTER - RSI SITI HAJAR*\n\nSalam Sejahtera Bapak/Ibu ${patientName},\n\nKami informasikan bahwa jadwal praktik dokter berikut untuk hari *${dayName}* ${changeText}:\n\n👨‍⚕️ Dokter: ${doctorName}\n🏥 Poliklinik: ${poliName}\n${type === 'modified' ? `⏰ Waktu Baru: ${newTime} WIB` : ''}\n\nMohon Bapak/Ibu memantau jadwal terkini di: ${websiteUrl}/doctors\n\nHormat kami,\nManajemen RSI Siti Hajar.`;
+    return `*PENGUMUMAN PERUBAHAN JADWAL DOKTER - RSI SITI HAJAR*\n\n` +
+      `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
+      `Kami menginformasikan bahwa jadwal praktik dokter spesialis kami untuk hari *${dayName}* ${changeText}:\n\n` +
+      `👨‍⚕️ Dokter: *${doctorName}*\n` +
+      `🏥 Poliklinik: ${poliName}\n` +
+      `${type === 'modified' ? `⏰ Jam Praktik Terbaru: *${newTime}* WITA` : ''}\n\n` +
+      `Mohon Bapak/Ibu menyesuaikan rencana kunjungan. Jadwal lengkap dokter dapat diakses setiap saat melalui website resmi kami.\n\n` +
+      `Semoga Bapak/Ibu senantiasa diberikan kesehatan.\n\n` +
+      `*Hormat Kami,*\n` +
+      `Manajemen RSI Siti Hajar`;
   }
 
   private generateReminderMessage(payload: Partial<NotificationPayload>): string {
-    const { patientName, bookingDate, bookingTime, doctorName, bookingCode } = payload;
-    return `*PENGINGAT JADWAL RSI*\n\nHalo ${patientName},\nIngat jadwal periksa Anda BESOK.\n\nKode: ${bookingCode}\nDokter: ${doctorName}\nJam: ${bookingTime} WIB\n\nDatang tepat waktu ya!`;
+    const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
+    return `*PENGINGAT (REMINDER) KUNJUNGAN - RSI SITI HAJAR*\n\n` +
+      `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
+      `Sampai jumpa BESOK dalam janji temu Anda di RSI Siti Hajar Mataram.\n\n` +
+      `📌 *Jadwal Esok Hari:*\n` +
+      `🎫 Kode Booking: *${bookingCode}*\n` +
+      `👨‍⚕️ Dokter: ${doctorName}\n` +
+      `🏥 Poliklinik: ${poliName}\n` +
+      `🗓️ Tanggal: ${bookingDate}\n` +
+      `⏰ Waktu: ${bookingTime} WITA\n\n` +
+      `Mohon hadir tepat waktu dan membawa persyaratan pendaftaran untuk kenyamanan bersama.\n\n` +
+      `Sampai jumpa esok hari.`;
   }
 
   private generateDoctorLeaveMessage(payload: {
@@ -393,7 +493,14 @@ export class NotificationService {
     bookingCode: string;
   }): string {
     const { patientName, doctorName, appointmentDate, appointmentTime } = payload;
-    const websiteUrl = this.configService.get('FRONTEND_URL') || 'https://rsisitihajarmataram.co.id';
-    return `*INFORMASI KETIDAKHADIRAN DOKTER*\n\nSalam Sejahtera Bapak/Ibu ${patientName},\n\nKami memohon maaf karena dr. *${doctorName}* berhalangan hadir pada jadwal Anda:\n📅 ${appointmentDate}\n⏰ ${appointmentTime} WIB.\n\nDemi kenyamanan Anda, silakan meninjau jadwal dokter pengganti atau hubungi pusat layanan kami untuk penjadwalan ulang di: ${websiteUrl}/doctors\n\nTerima kasih.`;
+    return `*PEMBERITAHUAN DOKTER BERHALANGAN HADIR - RSI SITI HAJAR*\n\n` +
+      `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
+      `Kami memohon maaf yang sebesar-besarnya, dr. *${doctorName}* berhalangan hadir pada jadwal Anda:\n\n` +
+      `🗓️ Hari/Tgl: ${appointmentDate}\n` +
+      `⏰ Waktu: ${appointmentTime} WITA\n\n` +
+      `Demi kenyamanan pengobatan Anda, silakan melakukan pendaftaran ulang untuk jadwal dokter lainnya atau hari lain melalui website kami.\n\n` +
+      `Atas pengertian Bapak/Ibu, kami sampaikan terima kasih.\n\n` +
+      `*Hormat Kami,*\n` +
+      `Manajemen Pelayanan RSI Siti Hajar`;
   }
 }

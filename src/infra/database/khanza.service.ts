@@ -103,7 +103,13 @@ export class KhanzaService implements OnModuleInit {
   }
 
   async getBookingCountsByDate(date: string) {
-    return this.bookingService.getBookingCountsByDate(date);
+    const cacheKey = `booking_counts_${date}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.bookingService.getBookingCountsByDate(date);
+    this.cache.set(cacheKey, result, 1 * 60 * 1000); // 1 minute (relatively real-time)
+    return result;
   }
 
   async getQueueInfo(poliCode: string, date: string) {
@@ -237,11 +243,23 @@ export class KhanzaService implements OnModuleInit {
 
   // Poliklinik methods
   async getPoliklinik() {
-    return this.poliklinikService.getPoliklinik();
+    const cacheKey = 'poliklinik_list';
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.poliklinikService.getPoliklinik();
+    this.cache.set(cacheKey, result, 24 * 60 * 60 * 1000); // 24 hours
+    return result;
   }
 
   async getPoliklinikWithActiveSchedules() {
-    return this.poliklinikService.getPoliklinikWithActiveSchedules();
+    const cacheKey = 'poliklinik_active_schedules';
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.poliklinikService.getPoliklinikWithActiveSchedules();
+    this.cache.set(cacheKey, result, 1 * 60 * 60 * 1000); // 1 hour
+    return result;
   }
 
   async getPoliByKdPoli(kdPoli: string) {
@@ -250,15 +268,33 @@ export class KhanzaService implements OnModuleInit {
 
   // Dokter methods
   async getDoctors() {
-    return this.dokterService.getDoctors();
+    const cacheKey = 'doctors_list';
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.dokterService.getDoctors();
+    this.cache.set(cacheKey, result, 1 * 60 * 60 * 1000); // 1 hour
+    return result;
   }
 
   async getDoctorSchedules() {
-    return this.dokterService.getDoctorSchedules();
+    const cacheKey = 'doctor_schedules_all';
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.dokterService.getDoctorSchedules();
+    this.cache.set(cacheKey, result, 1 * 60 * 60 * 1000); // 1 hour
+    return result;
   }
 
   async getDoctorSchedulesWithPoliInfo() {
-    return this.dokterService.getDoctorSchedulesWithPoliInfo();
+    const cacheKey = 'doctor_schedules_poli_info';
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.dokterService.getDoctorSchedulesWithPoliInfo();
+    this.cache.set(cacheKey, result, 1 * 60 * 60 * 1000); // 1 hour
+    return result;
   }
 
   async getDoctorSchedulesByDoctorAndPoli(doctorCode: string) {
@@ -266,7 +302,13 @@ export class KhanzaService implements OnModuleInit {
   }
 
   async getSpesialis() {
-    return this.dokterService.getSpesialis();
+    const cacheKey = 'spesialis_list';
+    const cached = this.cache.get(cacheKey);
+    if (cached) return cached;
+
+    const result = await this.dokterService.getSpesialis();
+    this.cache.set(cacheKey, result, 24 * 60 * 60 * 1000); // 24 hours
+    return result;
   }
 
   async findPoliByDoctor(doctorCode: string) {

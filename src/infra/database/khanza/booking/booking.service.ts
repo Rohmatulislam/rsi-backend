@@ -249,7 +249,7 @@ export class BookingService {
       alamat: patient.alamat || '-',
       no_telp: patient.no_tlp || '-',
       email: patient.email || '-',
-      kd_poli: 'LAB', // Standard code
+      kd_poli: 'U0025', // Laboratorium
       tambahan_pesan: `Pemeriksaan Lab: ${tests.map(t => t.name).join(', ')}`,
       status: 'Belum Dibalas',
       tanggal_booking: new Date()
@@ -305,7 +305,7 @@ export class BookingService {
       alamat: patient.alamat || '-',
       no_telp: patient.no_tlp || '-',
       email: patient.email || '-',
-      kd_poli: 'RAD', // Standard code
+      kd_poli: 'U0026', // Radiologi
       tambahan_pesan: `Pemeriksaan Radiologi: ${tests.map(t => t.name).join(', ')}`,
       status: 'Belum Dibalas',
       tanggal_booking: new Date()

@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from 'src/infra/database/prisma.service';
+import { PatientService } from 'src/infra/database/khanza/patient/patient.service';
 import { UpdateProfileDto, ChangePasswordDto, CreateFamilyMemberDto } from './dto/user.dto';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UserService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private patientService: PatientService
+    ) { }
 
     async getProfile(userId: string) {
         const user = await this.prisma.user.findUnique({
@@ -30,7 +34,13 @@ export class UserService {
             where: { userId },
         });
 
-        return { ...user, profile };
+        // Find No RM in Khanza if NIK is available
+        let noRM = null;
+        if (profile?.nik) {
+            noRM = await this.patientService.findNoRMByNIK(profile.nik);
+        }
+
+        return { ...user, profile, noRM };
     }
 
     async updateProfile(userId: string, dto: UpdateProfileDto) {

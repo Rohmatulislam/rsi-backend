@@ -27,6 +27,12 @@ export class PaymentService {
         itemDetails?: any[];
     }) {
         try {
+            const isValidEmail = (email?: string) => {
+                if (!email || email === '-') return false;
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                return emailRegex.test(email);
+            };
+
             const parameter = {
                 transaction_details: {
                     order_id: params.orderId,
@@ -35,8 +41,8 @@ export class PaymentService {
                 customer_details: {
                     first_name: params.customerDetails.firstName,
                     last_name: params.customerDetails.lastName || '',
-                    email: params.customerDetails.email,
-                    phone: params.customerDetails.phone,
+                    email: isValidEmail(params.customerDetails.email) ? params.customerDetails.email : undefined,
+                    phone: params.customerDetails.phone && params.customerDetails.phone !== '-' ? params.customerDetails.phone : undefined,
                 },
                 item_details: params.itemDetails,
                 usage_limit: 1,

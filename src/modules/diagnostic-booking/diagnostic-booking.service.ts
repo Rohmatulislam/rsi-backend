@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaService } from '../../infra/database/khanza.service';
 import { PrismaService } from '../../infra/database/prisma.service';
 import { PaymentService } from '../payment/payment.service';
+import { NotificationService } from '../notification/notification.service';
 
 @Injectable()
 export class DiagnosticBookingService {
@@ -10,7 +11,8 @@ export class DiagnosticBookingService {
     constructor(
         private readonly khanza: KhanzaService,
         private readonly prisma: PrismaService,
-        private readonly paymentService: PaymentService
+        private readonly paymentService: PaymentService,
+        private readonly notificationService: NotificationService
     ) { }
 
     private generateOrderNumber() {
@@ -81,7 +83,7 @@ export class DiagnosticBookingService {
 
         // 4. Process Lab
         if (labItems.length > 0) {
-            results.lab = await (this.khanza.bookingService as any).createLabBooking({
+            results.lab = await this.khanza.bookingService.createLabBooking({
                 patient: patientData,
                 date: date,
                 timeSlot: timeSlot,
@@ -92,7 +94,7 @@ export class DiagnosticBookingService {
 
         // 5. Process Radiologi
         if (radioItems.length > 0) {
-            results.radio = await (this.khanza.bookingService as any).createRadiologiBooking({
+            results.radio = await this.khanza.bookingService.createRadiologiBooking({
                 patient: patientData,
                 date: date,
                 timeSlot: timeSlot,
@@ -132,6 +134,23 @@ export class DiagnosticBookingService {
             this.logger.log(`Local DiagnosticOrder created: ${order.orderNumber}`);
         } catch (error) {
             this.logger.error('Failed to save local DiagnosticOrder', error);
+        }
+
+        // 7. Send notification
+        try {
+            await this.notificationService.sendDiagnosticBookingConfirmation({
+                patientName: patientData?.nm_pasien || patient.fullName || 'Pasien',
+                patientPhone: patient.phone || patientData?.no_tlp || '-',
+                patientEmail: patient.email || patientData?.email,
+                bookingDate: date ? new Date(date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-',
+                bookingTime: timeSlot || '-',
+                bookingCode: order?.orderNumber || (results.mcu && results.mcu[0]?.no_reg) || 'Booking Diag',
+                poliName: 'Layanan Diagnostik Terpadu',
+                doctorName: 'Tim Medis RSI Siti Hajar',
+                items: items.map((i: any) => i.name)
+            });
+        } catch (notificationError) {
+            this.logger.error('Failed to send diagnostic booking notification', notificationError);
         }
 
         return {

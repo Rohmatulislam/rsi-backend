@@ -12,7 +12,7 @@ export const POLI_KEYWORDS_REGEX = /(poliklinik|poli|klinik|eksekutif|ekskutif|e
  * Normalizes a poliklinik name by removing noise and standardizing casing
  * Example: "Poli Anak Eksekutif" -> "Anak Eksekutif"
  */
-export function normalizePoliName(name: string): string {
+export function normalizePoliName(name: string | undefined | null): string {
     if (!name) return '';
 
     // Clean common prefixes and the executive keyword for a "base" name
@@ -34,7 +34,7 @@ export function normalizePoliName(name: string): string {
 /**
  * Checks if a poliklinik name indicates an executive service
  */
-export function isExecutive(name: string): boolean {
+export function isExecutive(name: string | undefined | null): boolean {
     if (!name) return false;
     const lower = name.toLowerCase();
     return lower.includes('eksekutif') ||
@@ -46,7 +46,7 @@ export function isExecutive(name: string): boolean {
  * Formats a display name for a poliklinik
  * Ensures "Eksekutif" is used consistently instead of variations/typos
  */
-export function formatDisplayPoliName(name: string): string {
+export function formatDisplayPoliName(name: string | undefined | null): string {
     if (!name) return '';
 
     // Standardize "Eksekutif" variations

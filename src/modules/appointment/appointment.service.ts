@@ -677,9 +677,12 @@ export class AppointmentService {
     }>();
 
     appointments.forEach(appointment => {
+      const isCancelled = appointment.status === 'cancelled' || appointment.status === 'CANCELLED';
       const existing = patientsMap.get(appointment.patientId);
+
       if (existing) {
-        existing.appointmentsCount++;
+        if (!isCancelled) existing.appointmentsCount++;
+
         existing.appointments.push({
           id: appointment.id,
           appointmentDate: appointment.appointmentDate,
@@ -697,7 +700,7 @@ export class AppointmentService {
           patientName: appointment.patientName || 'Unknown',
           patientPhone: appointment.patientPhone || '',
           patientEmail: appointment.patientEmail || '',
-          appointmentsCount: 1,
+          appointmentsCount: isCancelled ? 0 : 1,
           lastAppointment: appointment.appointmentDate,
           appointments: [{
             id: appointment.id,
@@ -711,9 +714,19 @@ export class AppointmentService {
       }
     });
 
+    // Hitung total booking non-cancelled
+    const activeAppointmentsCount = appointments.filter(a =>
+      a.status !== 'cancelled' && a.status !== 'CANCELLED'
+    ).length;
+
+    // Hitung total pasien yang memiliki minimal 1 booking non-cancelled
+    const activePatientsCount = Array.from(patientsMap.values()).filter(p =>
+      p.appointmentsCount > 0
+    ).length;
+
     return {
-      totalPatients: patientsMap.size,
-      totalAppointments: appointments.length,
+      totalPatients: activePatientsCount,
+      totalAppointments: activeAppointmentsCount,
       patients: Array.from(patientsMap.values())
     };
   }

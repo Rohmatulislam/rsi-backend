@@ -13,6 +13,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 
 import { AppointmentSyncService } from '../appointment/appointment-sync.service';
 import { DoctorScheduleExceptionService } from './services/doctor-schedule-exception.service';
+import { CacheService } from 'src/infra/cache/cache.service';
 
 @Injectable()
 export class DoctorService {
@@ -26,6 +27,7 @@ export class DoctorService {
     private readonly notificationService: NotificationService,
     private readonly appointmentSync: AppointmentSyncService,
     private readonly exceptionService: DoctorScheduleExceptionService,
+    private readonly cache: CacheService,
   ) { }
 
   async create(createDoctorDto: CreateDoctorDto) {
@@ -242,6 +244,10 @@ export class DoctorService {
     if (this.isSyncing) return;
     this.isSyncing = true;
 
+    // Clear cache to ensure fresh data for sync and subsequent requests
+    this.cache.clear();
+    this.logger.log('🧹 [SYNC] Cache cleared before synchronization');
+
     try {
       let kDoctors = [];
       let kSchedules = [];
@@ -324,9 +330,8 @@ export class DoctorService {
             'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
           };
 
-          // PHASE 1: Find Exact Matches (Same Day, Start, End, Poli)
-          // This ensures unchanged schedules are matched 1-to-1 first
           for (const sched of docSchedules) {
+            if (!sched || !sched.hari_kerja) continue;
             const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
             if (dayInt < 0) continue;
 
@@ -351,7 +356,8 @@ export class DoctorService {
           for (const sched of docSchedules) {
             if ((sched as any)._matched) {
               // Already matched exactly, just prepare for DB insert
-              const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
+              const dayInt = daysMap[sched?.hari_kerja?.toUpperCase()] ?? -1;
+              if (dayInt < 0) continue;
               schedulesToCreate.push({
                 doctorId: savedDoctor.id,
                 dayOfWeek: dayInt,
@@ -362,7 +368,7 @@ export class DoctorService {
               continue;
             }
 
-            const dayInt = daysMap[sched.hari_kerja.toUpperCase()] ?? -1;
+            const dayInt = daysMap[sched?.hari_kerja?.toUpperCase()] ?? -1;
             if (dayInt >= 0) {
               schedulesToCreate.push({
                 doctorId: savedDoctor.id,
@@ -628,8 +634,9 @@ export class DoctorService {
           return {
             ...doctor,
             scheduleDetails: doctorSchedules.map(schedule => {
-              const schedDay = daysMap[schedule.hari_kerja.toUpperCase()];
-              const isToday = schedDay === todayDayInt;
+              const hariKerja = schedule?.hari_kerja || '';
+              const schedDay = daysMap[hariKerja.toUpperCase()] ?? -1;
+              const isToday = schedDay === todayDayInt && schedDay !== -1;
 
               // Calculate Quota
               const totalQuota = schedule.kuota || 0;
