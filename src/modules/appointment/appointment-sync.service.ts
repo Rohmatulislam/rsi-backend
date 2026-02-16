@@ -18,7 +18,7 @@ export class AppointmentSyncService {
      * Cron Job: Sync appointments every 10 minutes
      * Only syncs active doctors to save resources
      */
-    @Cron(CronExpression.EVERY_10_MINUTES)
+    // @Cron(CronExpression.EVERY_10_MINUTES)
     async handleCronSync() {
         this.logger.log('⏰ [AUTO_SYNC] Starting scheduled appointment sync...');
         try {

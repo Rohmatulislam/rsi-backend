@@ -76,7 +76,7 @@ export class DoctorService {
     return await this.khanzaService.getConnectionStatus();
   }
 
-  @Cron(CronExpression.EVERY_HOUR)
+  // @Cron(CronExpression.EVERY_HOUR)
   async handleAutomaticSync() {
     this.logger.log('⏰ [AUTO_SYNC] Starting scheduled doctor sync...');
     try {
