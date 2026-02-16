@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { KhanzaDBService } from '../khanza-db.service';
-import { getCurrentTimeWita } from '../../../utils/date.utils';
+import { getCurrentTimeWita, getTodayFormatted } from '../../../utils/date.utils';
 
 @Injectable()
 export class BookingService {
@@ -119,25 +119,41 @@ export class BookingService {
   }) {
     const { patient, date, timeSlot, packageId, packageName, poliCode, doctorCode, paymentType, notes } = data;
 
-    // 1. Generate No Reg for booking_registrasi (sequential per doctor/date)
-    const noReg = await this.getNextNoRegBooking(doctorCode, date);
-
-    // 2. Prepare data for booking_registrasi
     // Map timeSlot to actual time if it's a string like 'pagi', 'siang', 'sore'
     let timeValue = '08:00:00';
     if (timeSlot === 'pagi') timeValue = '08:00:00';
     else if (timeSlot === 'siang') timeValue = '13:00:00';
     else if (timeSlot === 'sore') timeValue = '16:00:00';
-    else if (timeSlot && timeSlot.includes(':')) timeValue = timeSlot.includes(':') && timeSlot.split(':').length === 2 ? `${timeSlot}:00` : timeSlot;
+    else if (timeSlot && timeSlot.includes(':')) {
+      // Handle range like "09:00 - 10:00" or just "09:00"
+      const startTime = timeSlot.split('-')[0].trim();
+      timeValue = startTime.split(':').length === 2 ? `${startTime}:00` : startTime;
+    }
+
+    // Check if booking already exists for this RM and date to avoid ER_DUP_ENTRY
+    const existingBooking = await this.dbService.db('booking_registrasi')
+      .where({
+        no_rkm_medis: patient.no_rkm_medis,
+        tanggal_periksa: date
+      })
+      .first();
+
+    let finalNoReg: string;
+    if (existingBooking) {
+      finalNoReg = existingBooking.no_reg;
+      this.logger.log(`Using existing booking for RM ${patient.no_rkm_medis} on ${date}. No Reg: ${finalNoReg}`);
+    } else {
+      finalNoReg = await this.getNextNoRegBooking(doctorCode, date);
+    }
 
     const bookingRegData = {
-      tanggal_booking: new Date().toISOString().split('T')[0],
-      jam_booking: new Date().toLocaleTimeString('id-ID', { hour12: false }).replace(/\./g, ':'),
+      tanggal_booking: getTodayFormatted(),
+      jam_booking: getCurrentTimeWita(),
       no_rkm_medis: patient.no_rkm_medis,
       tanggal_periksa: date,
       kd_dokter: doctorCode,
       kd_poli: poliCode,
-      no_reg: noReg,
+      no_reg: finalNoReg,
       kd_pj: paymentType || 'A09', // Default UMUM
       limit_reg: 0,
       waktu_kunjungan: `${date} ${timeValue}`,
@@ -145,13 +161,15 @@ export class BookingService {
     };
 
     // 3. Prepare data for booking_periksa (MCU specific details)
-    // In Khanza, booking_periksa often uses a unique booking number. 
-    // We'll use a combination of date and MR number or just the no_reg if suitable.
-    // However, the schema showed no_booking as varchar(17) PK.
-    const noBooking = `BK${date.replace(/-/g, '')}${patient.no_rkm_medis.slice(-4)}${noReg}`;
+    // no_booking must be unique (PK), max 17 chars.
+    // We'll use: BK + YYMMDD (6) + RM (6) + Random (3) = 17 chars.
+    const dateYYMMDD = date.replace(/-/g, '').slice(2);
+    const rmFull = patient.no_rkm_medis.toString().padStart(6, '0').slice(-6);
+    const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const noBooking = `BK${dateYYMMDD}${rmFull}${randomSuffix}`;
 
     const bookingPeriksaData = {
-      no_booking: noBooking.slice(0, 17),
+      no_booking: noBooking,
       tanggal: date,
       nama: patient.nm_pasien,
       alamat: patient.alamat || '-',
@@ -163,17 +181,42 @@ export class BookingService {
       tanggal_booking: new Date()
     };
 
+    // Check for existing booking_periksa by (tanggal, no_telp) to avoid ER_DUP_ENTRY
+    // Some Khanza installations have a unique constraint on (tanggal, no_telp)
+    const existingPeriksa = await this.dbService.db('booking_periksa')
+      .where({
+        tanggal: date,
+        no_telp: patient.no_tlp || '-'
+      })
+      .first();
+
     try {
       await this.dbService.db.transaction(async (trx) => {
-        await trx('booking_registrasi').insert(bookingRegData);
-        await trx('booking_periksa').insert(bookingPeriksaData);
+        // Only insert into booking_registrasi if it doesn't exist
+        if (!existingBooking) {
+          await trx('booking_registrasi').insert(bookingRegData);
+        }
+
+        if (existingPeriksa) {
+          // Update existing: append to tambahan_pesan
+          const newNotes = `${existingPeriksa.tambahan_pesan} | Paket: ${packageName} (${packageId})${notes ? ' | ' + notes : ''}`;
+          await trx('booking_periksa')
+            .where('no_booking', existingPeriksa.no_booking)
+            .update({
+              tambahan_pesan: newNotes.slice(0, 255) // Ensure it fits varchar(255)
+            });
+          this.logger.log(`Updated existing booking_periksa for RM ${patient.no_rkm_medis}`);
+        } else {
+          // Insert new
+          await trx('booking_periksa').insert(bookingPeriksaData);
+        }
       });
 
       this.logger.log(`MCU Booking Created: ${noBooking} for RM ${patient.no_rkm_medis}`);
 
       return {
         success: true,
-        no_reg: noReg,
+        no_reg: finalNoReg,
         no_booking: noBooking,
         no_rawat: noBooking // For consistency with other flows
       };
@@ -193,10 +236,14 @@ export class BookingService {
     const { patient, date, timeSlot, tests, paymentType } = data;
     const noReg = await this.getNextNoRegBooking('-', date); // Use '-' for generic lab doctor if unknown
 
-    const noBooking = `LB${date.replace(/-/g, '')}${patient.no_rkm_medis.slice(-4)}${noReg}`;
+    // unique no_booking (PK), max 17 chars. LB + YYMMDD (6) + RM (6) + Rand (3)
+    const dateYYMMDD = date.replace(/-/g, '').slice(2);
+    const rmFull = patient.no_rkm_medis.toString().padStart(6, '0').slice(-6);
+    const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const noBooking = `LB${dateYYMMDD}${rmFull}${randomSuffix}`;
 
     const bookingPeriksaData = {
-      no_booking: noBooking.slice(0, 17),
+      no_booking: noBooking,
       tanggal: date,
       nama: patient.nm_pasien,
       alamat: patient.alamat || '-',
@@ -208,9 +255,27 @@ export class BookingService {
       tanggal_booking: new Date()
     };
 
+    // Check for existing booking_periksa by (tanggal, no_telp)
+    const existingPeriksa = await this.dbService.db('booking_periksa')
+      .where({
+        tanggal: date,
+        no_telp: patient.no_tlp || '-'
+      })
+      .first();
+
     try {
-      await this.dbService.db('booking_periksa').insert(bookingPeriksaData);
-      return { success: true, no_booking: noBooking };
+      if (existingPeriksa) {
+        const newNotes = `${existingPeriksa.tambahan_pesan} | Pemeriksaan Lab: ${tests.map(t => t.name).join(', ')}`;
+        await this.dbService.db('booking_periksa')
+          .where('no_booking', existingPeriksa.no_booking)
+          .update({
+            tambahan_pesan: newNotes.slice(0, 255)
+          });
+        return { success: true, no_booking: existingPeriksa.no_booking };
+      } else {
+        await this.dbService.db('booking_periksa').insert(bookingPeriksaData);
+        return { success: true, no_booking: noBooking };
+      }
     } catch (e) {
       this.logger.error('Error creating Lab booking', e);
       throw e;
@@ -227,10 +292,14 @@ export class BookingService {
     const { patient, date, timeSlot, tests, paymentType } = data;
     const noReg = await this.getNextNoRegBooking('-', date);
 
-    const noBooking = `RD${date.replace(/-/g, '')}${patient.no_rkm_medis.slice(-4)}${noReg}`;
+    // unique no_booking (PK), max 17 chars. RD + YYMMDD (6) + RM (6) + Rand (3)
+    const dateYYMMDD = date.replace(/-/g, '').slice(2);
+    const rmFull = patient.no_rkm_medis.toString().padStart(6, '0').slice(-6);
+    const randomSuffix = Math.random().toString(36).substring(2, 5).toUpperCase();
+    const noBooking = `RD${dateYYMMDD}${rmFull}${randomSuffix}`;
 
     const bookingPeriksaData = {
-      no_booking: noBooking.slice(0, 17),
+      no_booking: noBooking,
       tanggal: date,
       nama: patient.nm_pasien,
       alamat: patient.alamat || '-',
@@ -242,9 +311,27 @@ export class BookingService {
       tanggal_booking: new Date()
     };
 
+    // Check for existing booking_periksa by (tanggal, no_telp)
+    const existingPeriksa = await this.dbService.db('booking_periksa')
+      .where({
+        tanggal: date,
+        no_telp: patient.no_tlp || '-'
+      })
+      .first();
+
     try {
-      await this.dbService.db('booking_periksa').insert(bookingPeriksaData);
-      return { success: true, no_booking: noBooking };
+      if (existingPeriksa) {
+        const newNotes = `${existingPeriksa.tambahan_pesan} | Pemeriksaan Radiologi: ${tests.map(t => t.name).join(', ')}`;
+        await this.dbService.db('booking_periksa')
+          .where('no_booking', existingPeriksa.no_booking)
+          .update({
+            tambahan_pesan: newNotes.slice(0, 255)
+          });
+        return { success: true, no_booking: existingPeriksa.no_booking };
+      } else {
+        await this.dbService.db('booking_periksa').insert(bookingPeriksaData);
+        return { success: true, no_booking: noBooking };
+      }
     } catch (e) {
       this.logger.error('Error creating Radiologi booking', e);
       throw e;

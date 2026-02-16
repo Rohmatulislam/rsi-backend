@@ -10,9 +10,9 @@ const connectionString = process.env.DATABASE_URL || process.env.DIRECT_URL;
 const isProduction = process.env.NODE_ENV === 'production';
 const pool = connectionString ? new Pool({
   connectionString,
-  max: isProduction ? 15 : 2, // Higher limit for production, keep low for dev
+  max: isProduction ? 15 : 5, // Increased from 2 to 5 for dev
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000, // Increased timeout for stability
+  connectionTimeoutMillis: 10000, // Increased from 5000 to 10000 ms
 }) : null;
 const adapter = pool ? new PrismaPg(pool) : undefined;
 

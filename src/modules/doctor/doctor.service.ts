@@ -80,7 +80,7 @@ export class DoctorService {
   async handleAutomaticSync() {
     this.logger.log('⏰ [AUTO_SYNC] Starting scheduled doctor sync...');
     try {
-      await this.performSync();
+      await this.performSync({ notify: false });
       this.logger.log('✅ [AUTO_SYNC] Scheduled doctor sync completed');
     } catch (error) {
       this.logger.error('❌ [AUTO_SYNC] Scheduled doctor sync failed:', error.message);
@@ -228,7 +228,7 @@ export class DoctorService {
     }
 
     // Kick off sync in background
-    this.performSync().catch(err => {
+    this.performSync({ notify: false }).catch(err => {
       this.logger.error('❌ [SYNC_DOCTORS_BG] Background sync failed:', err.message);
     });
 
@@ -238,7 +238,7 @@ export class DoctorService {
     };
   }
 
-  private async performSync() {
+  private async performSync(options: { notify: boolean } = { notify: false }) {
     if (this.isSyncing) return;
     this.isSyncing = true;
 
@@ -443,8 +443,8 @@ export class DoctorService {
             await this.prisma.schedule.createMany({ data: schedulesToCreate });
           }
 
-          // Trigger notifications if changes detected
-          if (changedSchedules.length > 0) {
+          // Trigger notifications if changes detected AND requested
+          if (changedSchedules.length > 0 && options.notify === true) {
             this.handleScheduleChangeNotifications(savedDoctor.id, doc.kd_dokter, doc.nm_dokter, changedSchedules).catch(err => {
               this.logger.error(`Error sending schedule change notifications for ${doc.kd_dokter}`, err);
             });
