@@ -47,6 +47,9 @@ export class AdminService {
       monthBookings: allAppointments.filter(app =>
         new Date(app.appointmentDate) >= monthAgo
       ).length,
+      pendingReviews: await (this.prisma as any).doctorRating.count({
+        where: { status: 'PENDING' }
+      }),
     };
   }
 
@@ -193,6 +196,20 @@ export class AdminService {
     const topDoctors = Object.values(doctorCounts)
       .sort((a: any, b: any) => b.bookingCount - a.bookingCount)
       .slice(0, limit);
+
+    // Add average rating for each top doctor
+    for (const doc of topDoctors) {
+      const aggregate = await (this.prisma as any).doctorRating.aggregate({
+        where: {
+          doctorId: doc.doctorId,
+          status: 'APPROVED',
+        },
+        _avg: {
+          rating: true,
+        },
+      });
+      doc.averageRating = aggregate._avg.rating || 0;
+    }
 
     return topDoctors;
   }

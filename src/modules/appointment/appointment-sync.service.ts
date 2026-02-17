@@ -251,8 +251,13 @@ export class AppointmentSyncService {
                 }
 
                 const appointmentDate = new Date(`${tglStr}T${jamStr}+08:00`);
-                const isCancelled = reg.stts === 'Batal';
-                const status = isCancelled ? 'cancelled' : 'scheduled';
+                const khanzaStatus = reg.stts;
+                let status = 'scheduled';
+                if (khanzaStatus === 'Sudah') {
+                    status = 'completed';
+                } else if (khanzaStatus === 'Batal') {
+                    status = 'cancelled';
+                }
 
                 // Check for existence and changes
                 const existing = await this.prisma.appointment.findUnique({
@@ -273,7 +278,7 @@ export class AppointmentSyncService {
                         this.logger.log(`⚠️ Booking cancelled locally for ${reg.no_rawat}`);
                         // Send Cancel Notification?
                         // this.notificationService.sendBookingCancellation(...)
-                    } else if (isTimeChanged && !isCancelled) {
+                    } else if (isTimeChanged && status !== 'cancelled') {
                         this.logger.log(`⏰ Booking rescheduled: ${existing.appointmentDate} -> ${appointmentDate}`);
 
                         // Debug Date Mismatch
