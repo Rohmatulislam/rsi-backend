@@ -18,7 +18,7 @@ export class AppointmentSyncService {
      * Cron Job: Sync appointments every 10 minutes
      * Only syncs active doctors to save resources
      */
-    // @Cron(CronExpression.EVERY_10_MINUTES)
+    @Cron(CronExpression.EVERY_10_MINUTES)
     async handleCronSync() {
         this.logger.log('⏰ [AUTO_SYNC] Starting scheduled appointment sync...');
         try {
@@ -26,11 +26,16 @@ export class AppointmentSyncService {
             // This detects if a patient was moved to a different date (which changes no_rawat)
             await this.processReschedules();
 
-            // 2. Then, run the standard daily sync to ensure data consistency
-            const datesToSync = [
-                new Date().toISOString().split('T')[0],
-                new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().split('T')[0]
-            ];
+            // 2. Then, run the standard sync to ensure data consistency
+            // Sync last 7 days + today + tomorrow to pick up status updates (e.g. 'Sudah')
+            const datesToSync: string[] = [];
+            const syncRange = 7; // days back
+
+            for (let i = -syncRange; i <= 1; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() + i);
+                datesToSync.push(d.toISOString().split('T')[0]);
+            }
 
             const doctors = await this.prisma.doctor.findMany({
                 where: { isActive: true, kd_dokter: { not: null } },
