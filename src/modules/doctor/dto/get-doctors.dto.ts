@@ -44,4 +44,7 @@ export class GetDoctorsDto {
 
     @IsOptional()
     poliCode?: string;
+
+    @IsOptional()
+    search?: string;
 }

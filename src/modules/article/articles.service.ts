@@ -47,9 +47,18 @@ export class ArticleService {
         }
     }
 
-    async findAll() {
+    async findAll(search?: string) {
+        const where: any = { isActive: true };
+
+        if (search) {
+            where.OR = [
+                { title: { contains: search, mode: 'insensitive' } },
+                { content: { contains: search, mode: 'insensitive' } }
+            ];
+        }
+
         return this.prisma.article.findMany({
-            where: { isActive: true },
+            where,
             orderBy: { createdAt: 'desc' },
             include: { categories: true }
         });

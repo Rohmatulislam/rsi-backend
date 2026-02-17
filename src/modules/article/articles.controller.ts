@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Logger, Req, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Logger, Req, BadRequestException, Query } from '@nestjs/common';
 import { ArticleService } from './articles.service';
 import { CreateArticleDto } from './dto/create-article.dto';
 import { UpdateArticleDto } from './dto/update-article.dto';
@@ -20,8 +20,8 @@ export class ArticleController {
 
     @Get(['', '/'])
     @AllowAnonymous()
-    findAll(@Req() req: Request) {
-        return this.articleService.findAll();
+    findAll(@Req() req: Request, @Query('search') search?: string) {
+        return this.articleService.findAll(search);
     }
 
     @Get(':slug')

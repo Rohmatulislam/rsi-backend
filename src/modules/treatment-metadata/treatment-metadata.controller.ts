@@ -1,7 +1,10 @@
 import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { TreatmentMetadataService } from './treatment-metadata.service';
+import { AdminGuard } from '../auth/guards/admin.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('treatment-metadata')
+@UseGuards(JwtAuthGuard)
 export class TreatmentMetadataController {
     constructor(private readonly service: TreatmentMetadataService) { }
 
@@ -16,6 +19,7 @@ export class TreatmentMetadataController {
     }
 
     @Post()
+    @UseGuards(AdminGuard)
     async upsert(@Body() data: any) {
         return this.service.upsert(data);
     }

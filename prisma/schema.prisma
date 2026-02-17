@@ -36,6 +36,7 @@ model Doctor {
   schedules          Schedule[]
   categories         Category[]    @relation("DoctorCategory")
   exceptions         DoctorScheduleException[]
+  ratings            DoctorRating[]
 }
 
 model DoctorScheduleException {
@@ -131,6 +132,7 @@ model User {
   prescriptions        Prescription[] @relation("UserPrescriptions")
   sessions             Session[]
   profile              UserProfile?
+  doctorRatings        DoctorRating[]
 
   @@map("user")
 }
@@ -543,5 +545,29 @@ model TreatmentMetadata {
   updatedAt     DateTime @updatedAt
 
   @@map("treatment_metadata")
+}
+
+model DoctorRating {
+  id        String       @id @default(cuid())
+  doctorId  String
+  userId    String
+  rating    Int          // 1-5
+  comment   String?      @db.Text
+  status    RatingStatus @default(PENDING)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  doctor    Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([userId])
+  @@map("doctor_ratings")
+}
+
+enum RatingStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 

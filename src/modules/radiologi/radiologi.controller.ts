@@ -1,8 +1,10 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { RadiologiService } from './radiologi.service';
 import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
-@Controller('radiologi')
+@Controller('radiology')
+@UseGuards(JwtAuthGuard)
 export class RadiologiController {
     constructor(private readonly radiologiService: RadiologiService) { }
 

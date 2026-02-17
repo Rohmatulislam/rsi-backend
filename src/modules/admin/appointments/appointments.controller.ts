@@ -3,11 +3,11 @@ import { AdminService } from '../admin.service';
 import { AdminGuard } from '../../auth/guards/admin.guard';
 
 @Controller('admin/appointments')
+@UseGuards(AdminGuard)
 export class AppointmentsController {
   constructor(private readonly adminService: AdminService) { }
 
   @Get('reports')
-  @UseGuards(AdminGuard)
   getAppointmentReport(
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
@@ -19,7 +19,6 @@ export class AppointmentsController {
     return this.adminService.getAppointmentReport(start, end, search);
   }
 
-  @UseGuards(AdminGuard)
   @Get('sync')
   async sync(
     @Query('startDate') startDate: string,

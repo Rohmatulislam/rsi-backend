@@ -1,7 +1,10 @@
-import { Controller, Post, Body, BadRequestException, Get, Param } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException, Get, Param, UseGuards } from '@nestjs/common';
 import { DiagnosticBookingService } from './diagnostic-booking.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('diagnostic')
+@UseGuards(JwtAuthGuard)
 export class DiagnosticBookingController {
     constructor(private readonly service: DiagnosticBookingService) { }
 
@@ -15,11 +18,13 @@ export class DiagnosticBookingController {
     }
 
     @Get('orders')
+    @UseGuards(AdminGuard)
     async getOrders() {
         return this.service.findAllOrders();
     }
 
     @Get('orders/:id')
+    @UseGuards(AdminGuard)
     async getOrder(@Param('id') id: string) {
         return this.service.findOrderById(id);
     }

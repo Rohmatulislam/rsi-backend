@@ -36,6 +36,8 @@ import { AccountingModule } from './modules/accounting/accounting.module';
 import { DiagnosticBookingModule } from './modules/diagnostic-booking/diagnostic-booking.module';
 import { TreatmentMetadataModule } from './modules/treatment-metadata/treatment-metadata.module';
 import { PaymentModule } from './modules/payment/payment.module';
+import { RatingModule } from './modules/rating/rating.module';
+import { PdfModule } from './modules/pdf/pdf.module';
 
 @Module({
   imports: [
@@ -76,6 +78,8 @@ import { PaymentModule } from './modules/payment/payment.module';
     DiagnosticBookingModule,
     TreatmentMetadataModule,
     PaymentModule,
+    RatingModule,
+    PdfModule,
     ThrottlerModule.forRoot([{
       ttl: 60000,
       limit: 100,

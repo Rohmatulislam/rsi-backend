@@ -1,17 +1,16 @@
-import { Controller, Get, Patch, Post, Delete, Body, Param, Req } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateProfileDto, ChangePasswordDto, CreateFamilyMemberDto } from './dto/user.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('users')
+@UseGuards(JwtAuthGuard)
 export class UserController {
     constructor(private readonly userService: UserService) { }
 
     @Get('me')
     async getProfile(@Req() req: any) {
-        const userId = req.user?.id;
-        if (!userId) {
-            return { error: 'Unauthorized' };
-        }
+        const userId = req.user.id;
         return this.userService.getProfile(userId);
     }
 
@@ -36,10 +35,7 @@ export class UserController {
     // Family Members
     @Get('me/family')
     async getFamilyMembers(@Req() req: any) {
-        const userId = req.user?.id;
-        if (!userId) {
-            return { error: 'Unauthorized' };
-        }
+        const userId = req.user.id;
         return this.userService.getFamilyMembers(userId);
     }
 
@@ -64,10 +60,7 @@ export class UserController {
     // Health History
     @Get('me/health-history')
     async getHealthHistory(@Req() req: any) {
-        const userId = req.user?.id;
-        if (!userId) {
-            return { error: 'Unauthorized' };
-        }
+        const userId = req.user.id;
         return this.userService.getHealthHistory(userId);
     }
 }

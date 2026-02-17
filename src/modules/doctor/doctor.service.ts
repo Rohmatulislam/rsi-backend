@@ -475,66 +475,71 @@ export class DoctorService {
     let kDoctorCodes = [];
     let todayCounts = new Map<string, number>();
 
-    try {
-      // Get all doctors from SIMRS Khanza
-      const [doctors, schedules, polis, counts] = await Promise.all([
-        this.khanzaService.getDoctors(),
-        this.khanzaService.getDoctorSchedulesWithPoliInfo(),
-        this.khanzaService.getPoliklinik(),
-        this.khanzaService.getBookingCountsByDate(getTodayFormatted())
-      ]);
+    // Skip SIMRS fetch if searching or if database is heavy
+    const shouldSkipSIMRS = !!getDoctorsDto.search;
 
-      kDoctors = doctors;
-      kSchedules = schedules;
-      const kPolis = polis;
+    if (!shouldSkipSIMRS) {
+      try {
+        // Get all doctors from SIMRS Khanza
+        const [doctors, schedules, polis, counts] = await Promise.all([
+          this.khanzaService.getDoctors(),
+          this.khanzaService.getDoctorSchedulesWithPoliInfo(),
+          this.khanzaService.getPoliklinik(),
+          this.khanzaService.getBookingCountsByDate(getTodayFormatted())
+        ]);
 
-      // Map counts for quick lookup
-      counts.forEach(c => todayCounts.set(c.kd_dokter, c.count));
+        kDoctors = doctors;
+        kSchedules = schedules;
+        const kPolis = polis;
 
-      // 1. FILTER BY POLI CODE IF PROVIDED
-      if (getDoctorsDto.poliCode) {
-        let actualPoliCode = getDoctorsDto.poliCode;
+        // Map counts for quick lookup
+        counts.forEach(c => todayCounts.set(c.kd_dokter, c.count));
 
-        // Resolve ID mapping if it's a CUID or slug (from local DB/CMS)
-        // SIMRS codes are usually short (e.g., ANA), so we check for longer IDs or known CUID prefix
-        if (actualPoliCode.startsWith('cl') || actualPoliCode.length > 5) {
-          try {
-            const item = await this.prisma.serviceItem.findUnique({
-              where: { id: actualPoliCode },
-              select: { name: true }
-            });
+        // 1. FILTER BY POLI CODE IF PROVIDED
+        if (getDoctorsDto.poliCode) {
+          let actualPoliCode = getDoctorsDto.poliCode;
 
-            if (item) {
-              const matched = kPolis.find(p => {
-                const pName = p.nm_poli.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
-                const iName = item.name.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
-                return pName === iName || pName.includes(iName) || iName.includes(pName);
+          // Resolve ID mapping if it's a CUID or slug (from local DB/CMS)
+          // SIMRS codes are usually short (e.g., ANA), so we check for longer IDs or known CUID prefix
+          if (actualPoliCode.startsWith('cl') || actualPoliCode.length > 5) {
+            try {
+              const item = await this.prisma.serviceItem.findUnique({
+                where: { id: actualPoliCode },
+                select: { name: true }
               });
 
-              if (matched) {
-                actualPoliCode = matched.kd_poli;
+              if (item) {
+                const matched = kPolis.find(p => {
+                  const pName = p.nm_poli.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                  const iName = item.name.toLowerCase().replace(/poliklinik|poli|klinik/gi, '').trim();
+                  return pName === iName || pName.includes(iName) || iName.includes(pName);
+                });
+
+                if (matched) {
+                  actualPoliCode = matched.kd_poli;
+                }
               }
+            } catch (error) {
+              console.error(`Failed to resolve SIMRS poliCode for lookup ID ${actualPoliCode}:`, error);
             }
-          } catch (error) {
-            console.error(`Failed to resolve SIMRS poliCode for lookup ID ${actualPoliCode}:`, error);
           }
+
+          kSchedules = kSchedules.filter(s => s.kd_poli === actualPoliCode);
         }
 
-        kSchedules = kSchedules.filter(s => s.kd_poli === actualPoliCode);
-      }
+        if (!getDoctorsDto.showAll) {
+          // Filter doctors that have schedules (or filtered schedules)
+          const doctorsWithSchedules = kDoctors.filter(kDoctor =>
+            kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
+          );
 
-      if (!getDoctorsDto.showAll) {
-        // Filter doctors that have schedules (or filtered schedules)
-        const doctorsWithSchedules = kDoctors.filter(kDoctor =>
-          kSchedules.some(schedule => schedule.kd_dokter === kDoctor.kd_dokter)
-        );
-
-        // Get corresponding doctor records from local database
-        kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+          // Get corresponding doctor records from local database
+          kDoctorCodes = doctorsWithSchedules.map(kDoc => kDoc.kd_dokter);
+        }
+      } catch (error) {
+        console.error('❌ [FIND_ALL] Error fetching from Khanza:', error.message);
+        // If Khanza is unreachable, we will show all doctors from local DB
       }
-    } catch (error) {
-      console.error('❌ [FIND_ALL] Error fetching from Khanza:', error.message);
-      // If Khanza is unreachable, we will show all doctors from local DB
     }
 
     const where: any = {};
@@ -560,6 +565,14 @@ export class DoctorService {
     // Default to only showing active doctors unless requested otherwise
     if (!getDoctorsDto.includeInactive) {
       where.isActive = true;
+    }
+
+    // Add name/keyword search
+    if (getDoctorsDto.search) {
+      where.OR = [
+        { name: { contains: getDoctorsDto.search, mode: 'insensitive' } },
+        { specialization: { contains: getDoctorsDto.search, mode: 'insensitive' } }
+      ];
     }
 
     const isExecParam = getDoctorsDto.isExecutive;
@@ -1086,65 +1099,65 @@ export class DoctorService {
       where: { id: scheduleId },
     });
   }
-
   async findBySlug(slug: string) {
-    const doctor = await this.prisma.doctor.findUnique({
-      where: { slug },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        licenseNumber: true,
-        phone: true,
-        specialization: true,
-        department: true,
-        imageUrl: true,
-        bio: true,
-        experience_years: true,
-        education: true,
-        certifications: true,
-        consultation_fee: true,
-        specialtyImage_url: true,
-        is_executive: true,
-        sip_number: true,
-        bpjs: true,
-        slug: true,
-        kd_dokter: true,
-        description: true,
-        isActive: true,
-        ...({ isStudying: true } as any),
-        ...({ isOnLeave: true } as any),
+    let doctor = await this.prisma.doctor.findUnique({
+      where: { slug: slug },
+      include: {
+        categories: true,
         schedules: {
-          select: {
-            id: true,
-            dayOfWeek: true,
-            startTime: true,
-            endTime: true,
-            kd_poli: true, // Added for offline fallback
-          }
+          where: { isActive: true },
         },
-        categories: {
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-          },
-        },
-      }
+      },
     });
 
-    if (doctor && doctor.kd_dokter) {
-      try {
-        // Get schedule details from Khanza including poli information
-        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter as any);
+    // Fallback to ID if slug doesn't match
+    if (!doctor) {
+      doctor = await this.prisma.doctor.findUnique({
+        where: { id: slug },
+        include: {
+          categories: true,
+          schedules: {
+            where: { isActive: true },
+          },
+        },
+      });
+    }
 
+    if (!doctor) {
+      return null;
+    }
+
+    // Get aggregated rating data
+    let averageRating = 0;
+    let totalReviews = 0;
+    try {
+      const aggregate = await (this.prisma as any).doctorRating.aggregate({
+        where: {
+          doctorId: doctor.id,
+          status: 'APPROVED',
+        },
+        _avg: {
+          rating: true,
+        },
+        _count: {
+          rating: true,
+        },
+      });
+      averageRating = aggregate._avg.rating || 0;
+      totalReviews = aggregate._count.rating || 0;
+    } catch (e) {
+      this.logger.error(`Error calculating ratings for doctor ${doctor.id}: ${e.message}`);
+    }
+
+    // Add Khanza data if available
+    if (doctor.kd_dokter) {
+      try {
+        const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter as any);
         if (kSchedules && kSchedules.length > 0) {
-          // Identify today's registrations to prioritize the active polyclinic
           const days = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
           const today = days[new Date().getDay()];
           const todayDate = new Date().toISOString().split('T')[0];
 
-          // Fetch counts of registrations today for this doctor per poli to identify "actually active" poli
           const counts = await this.khanzaService.db('reg_periksa')
             .where('kd_dokter', doctor.kd_dokter)
             .where('tgl_registrasi', todayDate)
@@ -1158,45 +1171,25 @@ export class DoctorService {
             return acc;
           }, {} as Record<string, number>);
 
-          // Fetch today's date for exception checking
-          const nowDate = new Date();
-          const next7Days = new Array(7).fill(0).map((_, i) => {
-            const d = new Date(nowDate);
-            d.setDate(nowDate.getDate() + i);
-            return d;
-          });
-
-          // Get exceptions for the next 7 days for this doctor
           const exceptions = await this.exceptionService.getExceptionsByDoctor(
-            (doctor as any).id,
-            nowDate,
-            next7Days[6]
+            doctor.id,
+            new Date(),
+            new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
           );
 
-          // Map Khansa schedules
-          let scheduleDetails = kSchedules.map(schedule => {
+          const scheduleDetails = kSchedules.map(schedule => {
             const isToday = schedule.hari_kerja === today || (today === 'MINGGU' && schedule.hari_kerja === 'AKHAD');
-
-            // Check if there is an exception for today ONLY if this schedule is for today
-            // Note: This logic is tricky because Khanza schedule is weekly, but exception is by DATE.
-            // We need to match the specific date of this schedule occurrence.
-            // For now, let's just check if TODAY has an exception if isToday is true.
-
             let status = 'AVAILABLE';
             let note = '';
 
             if (isToday) {
               const todayException = exceptions.find(e =>
-                e.date.toISOString().split('T')[0] === nowDate.toISOString().split('T')[0]
+                e.date.toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
               );
-
               if (todayException) {
                 if (todayException.type === 'LEAVE') {
                   status = 'LEAVE';
                   note = todayException.note || 'Dokter Cuti';
-                } else if (todayException.type === 'RESCHEDULE') {
-                  // Update start/end time
-                  // This is complex for display. We might just mark it.
                 }
               }
             }
@@ -1216,105 +1209,24 @@ export class DoctorService {
             };
           });
 
-          // Filter out LEAVE schedules from display if desired, or keep them with status=LEAVE
-          // Keeping them allows frontend to show "Cuti Hari Ini" logic
-
-          scheduleDetails.sort((a, b) => {
-            // 1. Is it today?
-            if (a.isToday && !b.isToday) return -1;
-            if (!a.isToday && b.isToday) return 1;
-
-            if (a.isToday && b.isToday) {
-              // 2. Which one has more queue today? (likely the "real" active poli)
-              if (a.todayQueueSize > b.todayQueueSize) return -1;
-              if (a.todayQueueSize < b.todayQueueSize) return 1;
-
-              // 3. Which one starts earlier?
-              return (a.jam_mulai || '').localeCompare(b.jam_mulai || '');
-            }
-
-            return 0;
-          });
-
           return {
             ...doctor,
-            scheduleDetails
+            averageRating,
+            totalReviews,
+            scheduleDetails: scheduleDetails.sort((a, b) => (a.isToday ? -1 : 1))
           };
         }
       } catch (err) {
-        console.error(`❌ [FIND_BY_SLUG] Error fetching from Khanza for doctor ${doctor.kd_dokter}:`, err.message);
+        this.logger.error(`Error fetching from Khanza for doctor ${doctor.kd_dokter}: ${err.message}`);
       }
     }
 
-    if (!doctor) {
-      const idBasedDoctor = await this.prisma.doctor.findUnique({
-        where: { id: slug },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          licenseNumber: true,
-          phone: true,
-          specialization: true,
-          department: true,
-          imageUrl: true,
-          bio: true,
-          experience_years: true,
-          education: true,
-          certifications: true,
-          consultation_fee: true,
-          specialtyImage_url: true,
-          is_executive: true,
-          sip_number: true,
-          bpjs: true,
-          slug: true,
-          kd_dokter: true,
-          description: true,
-          isActive: true,
-          isStudying: true,
-          isOnLeave: true,
-          schedules: {
-            select: {
-              id: true,
-              dayOfWeek: true,
-              startTime: true,
-              endTime: true,
-              kd_poli: true,
-            }
-          },
-          categories: {
-            select: {
-              id: true,
-              name: true,
-              slug: true,
-            },
-          },
-        }
-      });
-
-      if (idBasedDoctor && idBasedDoctor.kd_dokter) {
-        try {
-          const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(idBasedDoctor.kd_dokter as any);
-          if (kSchedules && kSchedules.length > 0) {
-            const scheduleDetails = kSchedules.map(schedule => ({
-              kd_poli: schedule.kd_poli,
-              nm_poli: schedule.nm_poli,
-              hari_kerja: schedule.hari_kerja,
-              jam_mulai: schedule.jam_mulai,
-              jam_selesai: schedule.jam_selesai,
-              kuota: schedule.kuota,
-              consultation_fee: schedule.registrasi || 0,
-            }));
-            return { ...idBasedDoctor, scheduleDetails };
-          }
-        } catch (error) {
-          console.error(`❌ [FIND_BY_ID_FALLBACK] Error fetching from Khanza for doctor ${idBasedDoctor.kd_dokter}:`, error.message);
-        }
-      }
-      return idBasedDoctor;
-    }
-
-    return doctor;
+    return {
+      ...doctor,
+      averageRating,
+      totalReviews,
+      scheduleDetails: []
+    };
   }
 
   private async handleScheduleChangeNotifications(doctorId: string, doctorCode: string, doctorName: string, changes: any[]) {

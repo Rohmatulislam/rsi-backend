@@ -1,12 +1,14 @@
-import { Controller, Get, Param, Query, Res } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { LabService } from './lab.service';
 import { PatientLabService } from './patient-lab.service';
 import { PdfService } from '../pdf/pdf.service';
 import { PatientService } from '../../infra/database/khanza/patient/patient.service';
 import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('lab')
+@UseGuards(JwtAuthGuard)
 export class LabController {
     constructor(
         private readonly labService: LabService,
@@ -49,13 +51,11 @@ export class LabController {
     }
 
     @Get('history/:noRM')
-    @AllowAnonymous() // Should eventually be protected by JWT
     async getPatientLabHistory(@Param('noRM') noRM: string) {
         return this.patientLabService.getPatientLabHistory(noRM);
     }
 
     @Get('results/:noRawat/:kdJenisPrw')
-    @AllowAnonymous() // Should eventually be protected by JWT
     async getLabResultDetails(
         @Param('noRawat') noRawat: string,
         @Param('kdJenisPrw') kdJenisPrw: string
@@ -64,7 +64,6 @@ export class LabController {
     }
 
     @Get('download-pdf/:noRawat/:kdJenisPrw')
-    @AllowAnonymous()
     async downloadLabResultPdf(
         @Param('noRawat') noRawat: string,
         @Param('kdJenisPrw') kdJenisPrw: string,

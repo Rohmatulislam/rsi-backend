@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Body, Param } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import { McuApiService } from './mcu.service';
 import { AllowAnonymous } from '../../infra/auth/allow-anonymous.decorator';
-import { UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 
 @Controller('mcu')
+@UseGuards(JwtAuthGuard)
 export class McuController {
     constructor(private readonly mcuService: McuApiService) { }
 
