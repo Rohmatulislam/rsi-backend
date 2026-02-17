@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { GoogleGenerativeAI, GenerativeModel, ChatSession } from '@google/generative-ai';
 import { DoctorService } from '../doctor/doctor.service';
 import { PrismaService } from '../../infra/database/prisma.service';
+import { KnowledgeBaseService } from './knowledge-base.service';
 
 const SYSTEM_PROMPT = `Anda adalah Siti, asisten virtual RSI Siti Hajar Mataram.
 
@@ -24,7 +25,11 @@ KONTAK:
 - Alamat: Jl. Catur Warga No. 10 B, Mataram, NTB
 - Website: rsisitihajar.com
 
-PENTING: Jika ada DATA DOKTER atau JADWAL yang diberikan dalam context, gunakan informasi tersebut untuk menjawab pertanyaan user. Jangan bilang "tidak bisa memberikan" jika datanya sudah tersedia.`;
+PENTING: 
+1. Jika ada DATA DOKTER/JADWAL, gunakan informasi tersebut.
+2. Untuk pertanyaan biaya layanan satuan/parsial, gunakan data [HARGA LAYANAN SATUAN] dan jumlahkan harganya.
+3. Selalu bandingkan dengan [DAFTAR PAKET MCU 2026], jika paket lebih murah/lengkap dengan selisih sedikit, sarankan paket tersebut agar user lebih hemat.
+4. Jangan bilang "tidak bisa memberikan" jika datanya sudah tersedia di context.`;
 
 /** Max sessions kept in memory before evicting oldest */
 const MAX_SESSIONS = 100;
@@ -50,6 +55,7 @@ export class ChatService implements OnModuleInit {
     constructor(
         private readonly doctorService: DoctorService,
         private readonly prisma: PrismaService,
+        private readonly kbService: KnowledgeBaseService,
     ) { }
 
     onModuleInit() {
@@ -58,6 +64,8 @@ export class ChatService implements OnModuleInit {
             this.logger.warn('GEMINI_API_KEY is not set. Chatbot will use fallback responses.');
             return;
         }
+
+        this.logger.log(`GEMINI_API_KEY found (length: ${apiKey.length}). Initializing Gemini AI...`);
 
         try {
             const genAI = new GoogleGenerativeAI(apiKey);
@@ -343,56 +351,98 @@ export class ChatService implements OnModuleInit {
         return null;
     }
 
+    // Detect if message is health-related or asking about preparations
+    private isHealthQuery(message: string): boolean {
+        const lower = message.toLowerCase();
+        const keywords = [
+            'persiapan', 'puasa', 'syarat', 'cara cek', 'hasil', 'sakit', 'gejala',
+            'mcu', 'lab', 'radiologi', 'rontgen', 'obat', 'terapi'
+        ];
+        return keywords.some(k => lower.includes(k));
+    }
+
     /**
      * Process a chat message. Each sessionId gets its own isolated AI conversation.
      * @param message - The user's message
      * @param sessionId - Unique session identifier (defaults to 'default' for backward compatibility)
      */
     async processMessage(message: string, sessionId: string = 'default'): Promise<string> {
-        this.logger.log(`Processing message (session: ${sessionId}): ${message}`);
+        try {
+            this.logger.log(`Processing message (session: ${sessionId}): ${message}`);
 
-        // Check if asking about doctor schedule
-        if (this.isDoctorQuery(message)) {
-            const doctorName = this.extractDoctorName(message);
-            if (doctorName) {
-                const dayFilter = this.extractDay(message);
-                this.logger.log(`Detected doctor query for: ${doctorName}, day filter: ${dayFilter || 'none'}`);
-                const scheduleInfo = await this.getDoctorSchedule(doctorName, dayFilter || undefined);
+            // 1. Fetch Dynamic Context from Knowledge Base
+            let rsContext = '';
+            let mcuContext = '';
 
-                // If we found schedule, return it directly
-                if (!scheduleInfo.includes('Tidak ditemukan') && !scheduleInfo.includes('Gagal')) {
-                    return scheduleInfo;
-                }
+            try {
+                [rsContext, mcuContext] = await Promise.all([
+                    this.kbService.getHospitalContext(),
+                    this.kbService.getMCUPackagesContext()
+                ]);
+            } catch (contextError) {
+                this.logger.error('Failed to fetch knowledge base context:', contextError);
+            }
 
-                // Otherwise, let AI handle with context
-                const chatSession = this.getOrCreateSession(sessionId);
-                if (chatSession) {
-                    const contextMessage = `[CONTEXT: User mencari jadwal dokter "${doctorName}". Hasil pencarian: ${scheduleInfo}]\n\nUser: ${message}`;
-                    try {
-                        const result = await chatSession.sendMessage(contextMessage);
-                        return result.response.text();
-                    } catch (error) {
-                        return scheduleInfo;
+            let combinedContext = `[KNOWLEDGE_BASE]\n${rsContext}\n${mcuContext}\n`;
+
+            // 2. Specialized Health / Procedure Context
+            try {
+                if (this.isHealthQuery(message)) {
+                    const procedureKeywords = ['mcu', 'lab', 'radiologi', 'rontgen', 'usg', 'ekg'];
+                    for (const kw of procedureKeywords) {
+                        if (message.toLowerCase().includes(kw)) {
+                            const prep = await this.kbService.getTreatmentPreparation(kw);
+                            if (prep) combinedContext += `\n[PROCEDURE_PREPARATION]\n${prep}\n`;
+                        }
                     }
                 }
-                return scheduleInfo;
+            } catch (healthError) {
+                this.logger.error('Failed to fetch health context:', healthError);
             }
-        }
 
-        const chatSession = this.getOrCreateSession(sessionId);
-        if (!chatSession) {
-            return this.getFallbackResponse(message);
-        }
+            // 3. Handle Doctor Schedule Query as separate higher-priority branch
+            try {
+                if (this.isDoctorQuery(message)) {
+                    const doctorName = this.extractDoctorName(message);
+                    if (doctorName) {
+                        const dayFilter = this.extractDay(message);
+                        const scheduleInfo = await this.getDoctorSchedule(doctorName, dayFilter || undefined);
 
-        try {
-            this.logger.log(`Sending message to Gemini (session: ${sessionId}): ${message}`);
-            const result = await chatSession.sendMessage(message);
-            const response = result.response.text();
-            this.logger.log(`Gemini response received: ${response.substring(0, 100)}...`);
-            return response;
-        } catch (error: any) {
-            this.logger.error('Gemini API error:', error?.message || error);
-            return 'Mohon maaf, terjadi gangguan pada sistem. Silakan coba lagi atau hubungi Customer Service kami di (0370) 631885.';
+                        if (!scheduleInfo.includes('Tidak ditemukan') && !scheduleInfo.includes('Gagal')) {
+                            return scheduleInfo;
+                        }
+                        combinedContext += `\n[DOCTOR_SEARCH_RESULT]\n${scheduleInfo}\n`;
+                    }
+                }
+            } catch (doctorError) {
+                this.logger.error('Failed to handle doctor query:', doctorError);
+            }
+
+            const chatSession = this.getOrCreateSession(sessionId);
+            if (!chatSession) {
+                return this.getFallbackResponse(message);
+            }
+
+            // 4. Send to Gemini
+            try {
+                // Add a disclaimer instructions to the start of the message if health related
+                if (this.isHealthQuery(message)) {
+                    combinedContext += `\nCATATAN: User menanyakan hal medis/prosedur. Ingatkan bahwa ini edukatif dan tetap harus konsultasi dokter.\n`;
+                }
+
+                const promptWithContext = `${combinedContext}\n\nUser: ${message}`;
+
+                this.logger.log(`Sending message to Gemini (session: ${sessionId}) with context.`);
+                const result = await chatSession.sendMessage(promptWithContext);
+                const response = result.response.text();
+                return response;
+            } catch (error: any) {
+                this.logger.error(`Gemini API error (session: ${sessionId}):`, error?.stack || error?.message || error);
+                return 'Mohon maaf, terjadi gangguan saat berkomunikasi dengan asisten AI. Silakan coba lagi nanti.';
+            }
+        } catch (globalError) {
+            this.logger.error('CRITICAL: Error in processMessage global catch:', globalError);
+            return 'Mohon maaf, terjadi kesalahan internal pada sistem chat kami.';
         }
     }
 
