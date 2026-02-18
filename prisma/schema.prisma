@@ -133,6 +133,7 @@ model User {
   sessions             Session[]
   profile              UserProfile?
   doctorRatings        DoctorRating[]
+  chatMessages         ChatMessage[]
 
   @@map("user")
 }
@@ -571,3 +572,29 @@ enum RatingStatus {
   REJECTED
 }
 
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String   // Link messages globally to a session
+  role      String   // 'user' | 'model'
+  content   String   @db.Text
+  userId    String?  // Optional: link to registered user
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("chat_messages")
+}
+
+model ChatFeedback {
+  id        String   @id @default(cuid())
+  messageId String   @unique
+  rating    Int      // 1 for up, -1 for down
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  @@map("chat_feedback")
+}

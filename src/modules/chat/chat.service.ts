@@ -4,7 +4,7 @@ import { DoctorService } from '../doctor/doctor.service';
 import { PrismaService } from '../../infra/database/prisma.service';
 import { KnowledgeBaseService } from './knowledge-base.service';
 
-const SYSTEM_PROMPT = `Anda adalah Siti, asisten virtual RSI Siti Hajar Mataram.
+const FALLBACK_SYSTEM_PROMPT = `Anda adalah Siti, asisten virtual RSI Siti Hajar Mataram.
 
 ATURAN WAJIB:
 - Jawab SINGKAT, PADAT, maksimal 2-3 kalimat.
@@ -12,24 +12,20 @@ ATURAN WAJIB:
 - Langsung ke inti jawaban, JANGAN bertele-tele.
 - Jika ditanya di luar topik rumah sakit, tolak dengan sopan dalam 1 kalimat.
 
+CONTOH CARA MENJAWAB (PENTING):
+- Jika pasien tanya persiapan Lab (Contoh: "Apa persiapan cek gula darah?"):
+  "Untuk cek gula darah puasa, Bapak/Ibu wajib puasa 8-10 jam sebelumnya ya. Boleh minum air putih saja. Informasi ini bersifat edukatif, silakan konsultasi lebih lanjut dengan dokter kami untuk diagnosa pasti."
+- Jika pasien tanya Rontgen (Contoh: "Mau rontgen dada, apa syaratnya?"):
+  "Untuk rontgen (thoraks), mohon lepaskan perhiasan atau benda logam di area dada sebelum pemeriksaan. Informasi ini bersifat edukatif, silakan konsultasi lebih lanjut dengan dokter kami untuk diagnosa pasti."
+- Jika pasien tanya Paket MCU (Contoh: "Ada paket MCU apa saja?"):
+  "Kami punya beberapa paket, salah satunya Paket MCU Basic seharga Rp 450.000 yang sudah mencakup konsultasi dokter dan pemeriksaan penunjang. Informasi ini bersifat edukatif, silakan konsultasi lebih lanjut dengan dokter kami untuk diagnosa pasti."
+
 LAYANAN RS:
-- Rawat Jalan & Rawat Inap
-- IGD 24 Jam
-- Laboratorium & Radiologi
-- Farmasi & Rehabilitasi Medik
-- Medical Check Up (MCU)
+- Rawat Jalan & Rawat Inap, IGD 24 Jam, Lab, Radiologi, Farmasi, MCU.
 - Spesialis: Penyakit Dalam, Anak, Kandungan, Bedah, dll.
 
 KONTAK:
-- Telp: (0370) 631885 | IGD: (0370) 631886
-- Alamat: Jl. Catur Warga No. 10 B, Mataram, NTB
-- Website: rsisitihajar.com
-
-PENTING: 
-1. Jika ada DATA DOKTER/JADWAL, gunakan informasi tersebut.
-2. Untuk pertanyaan biaya layanan satuan/parsial, gunakan data [HARGA LAYANAN SATUAN] dan jumlahkan harganya.
-3. Selalu bandingkan dengan [DAFTAR PAKET MCU 2026], jika paket lebih murah/lengkap dengan selisih sedikit, sarankan paket tersebut agar user lebih hemat.
-4. Jangan bilang "tidak bisa memberikan" jika datanya sudah tersedia di context.`;
+- Telp: (0370) 631885 | Alamat: Jl. Catur Warga No. 10 B, Mataram, NTB.`;
 
 /** Max sessions kept in memory before evicting oldest */
 const MAX_SESSIONS = 100;
@@ -58,22 +54,52 @@ export class ChatService implements OnModuleInit {
         private readonly kbService: KnowledgeBaseService,
     ) { }
 
-    onModuleInit() {
+    async onModuleInit() {
+        await this.reloadPrompt();
+
+        // One-time sync: if DB prompt exists but lacks examples, update it
+        try {
+            const dbPrompt = await this.prisma.aboutContent.findUnique({
+                where: { key: 'ai_system_prompt' }
+            });
+            if (dbPrompt && !dbPrompt.value.includes('CONTOH CARA MENJAWAB')) {
+                await this.prisma.aboutContent.update({
+                    where: { key: 'ai_system_prompt' },
+                    data: { value: FALLBACK_SYSTEM_PROMPT }
+                });
+                await this.reloadPrompt();
+                this.logger.log('Synced AI system prompt examples to database.');
+            }
+        } catch (e) {
+            this.logger.error('Failed to sync prompt examples:', e);
+        }
+    }
+
+    async reloadPrompt() {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            this.logger.warn('GEMINI_API_KEY is not set. Chatbot will use fallback responses.');
+            this.logger.warn('GEMINI_API_KEY is not set.');
             return;
         }
 
-        this.logger.log(`GEMINI_API_KEY found (length: ${apiKey.length}). Initializing Gemini AI...`);
-
         try {
+            // Fetch prompt from DB
+            const dbPrompt = await this.prisma.aboutContent.findUnique({
+                where: { key: 'ai_system_prompt' }
+            });
+
+            const systemInstruction = dbPrompt?.value || FALLBACK_SYSTEM_PROMPT;
+            this.logger.log(`Initializing Gemini with ${dbPrompt ? 'DB custom prompt' : 'fallback prompt'}.`);
+
             const genAI = new GoogleGenerativeAI(apiKey);
             this.model = genAI.getGenerativeModel({
                 model: 'gemini-flash-latest',
-                systemInstruction: SYSTEM_PROMPT,
+                systemInstruction,
             });
-            this.logger.log('Gemini AI initialized successfully.');
+
+            // Clear in-memory sessions to force new instruction application
+            this.sessions.clear();
+            this.logger.log('Gemini AI initialized/reloaded successfully.');
         } catch (error) {
             this.logger.error('Failed to initialize Gemini AI:', error);
         }
@@ -83,7 +109,7 @@ export class ChatService implements OnModuleInit {
      * Get or create a chat session for a given sessionId.
      * Each user/conversation gets its own isolated session.
      */
-    private getOrCreateSession(sessionId: string): ChatSession | null {
+    private async getOrCreateSession(sessionId: string): Promise<ChatSession | null> {
         if (!this.model) return null;
 
         const existing = this.sessions.get(sessionId);
@@ -97,9 +123,105 @@ export class ChatService implements OnModuleInit {
         // Evict expired sessions or oldest if over limit
         this.evictStaleSessions();
 
-        const session = this.model.startChat({ history: [] });
+        // Load history from DB to provide continuity
+        const historyData = await this.getHistory(sessionId);
+        const history = historyData.map(m => ({
+            role: m.role as 'user' | 'model',
+            parts: [{ text: m.content }],
+        }));
+
+        const session = this.model.startChat({ history });
         this.sessions.set(sessionId, { session, lastAccessed: now });
         return session;
+    }
+
+    async getHistory(sessionId: string) {
+        try {
+            return await (this.prisma as any).chatMessage.findMany({
+                where: { sessionId },
+                orderBy: { createdAt: 'asc' },
+                take: 50,
+            });
+        } catch (error) {
+            this.logger.error(`Failed to load history for session ${sessionId}:`, error);
+            return [];
+        }
+    }
+
+    async getSessions(userId: string) {
+        try {
+            const sessions = await (this.prisma as any).chatMessage.groupBy({
+                by: ['sessionId'],
+                where: { userId },
+                _max: { createdAt: true },
+                orderBy: {
+                    _max: {
+                        createdAt: 'desc',
+                    },
+                },
+                take: 20,
+            });
+
+            // For each session, get the last message content as a preview
+            const sessionsWithPreview = await Promise.all(
+                sessions.map(async (s: any) => {
+                    const lastMsg = await (this.prisma as any).chatMessage.findFirst({
+                        where: { sessionId: s.sessionId },
+                        orderBy: { createdAt: 'desc' },
+                    });
+                    return {
+                        sessionId: s.sessionId,
+                        lastMessage: lastMsg?.content || '',
+                        createdAt: s._max.createdAt,
+                    };
+                }),
+            );
+
+            return sessionsWithPreview;
+        } catch (error) {
+            this.logger.error(`Failed to get sessions for user ${userId}:`, error);
+            return [];
+        }
+    }
+
+    private async saveMessage(sessionId: string, role: 'user' | 'model', content: string, userId?: string): Promise<string> {
+        try {
+            const msg = await (this.prisma as any).chatMessage.create({
+                data: { sessionId, role, content, userId },
+            });
+
+            // Trigger asynchronous pruning to keep DB lean
+            this.pruneHistory(sessionId).catch(err =>
+                this.logger.error(`Pruning failed for session ${sessionId}:`, err)
+            );
+
+            return msg.id;
+        } catch (error) {
+            this.logger.error(`Failed to save message for session ${sessionId}:`, error);
+            return '';
+        }
+    }
+
+    private async pruneHistory(sessionId: string) {
+        // Keep only last 100 messages per session
+        const count = await (this.prisma as any).chatMessage.count({ where: { sessionId } });
+        if (count > 100) {
+            const oldestToKeep = await (this.prisma as any).chatMessage.findMany({
+                where: { sessionId },
+                orderBy: { createdAt: 'desc' },
+                skip: 99,
+                take: 1,
+            });
+
+            if (oldestToKeep.length > 0) {
+                await (this.prisma as any).chatMessage.deleteMany({
+                    where: {
+                        sessionId,
+                        createdAt: { lt: oldestToKeep[0].createdAt },
+                    },
+                });
+            }
+        }
     }
 
     /**
@@ -362,13 +484,31 @@ export class ChatService implements OnModuleInit {
     }
 
     /**
+     * Detect if message is a medical emergency.
+     */
+    private isEmergencyQuery(message: string): boolean {
+        const lower = message.toLowerCase();
+        const emergencyKeywords = [
+            'sesak', 'sesak napas', 'nyeri dada', 'pendarahan', 'kecelakaan',
+            'keracunan', 'serangan jantung', 'pingsan', 'kejang',
+            'muntah darah', 'gawat', 'darurat', 'emergency',
+            'melahirkan', 'pecah ketuban', 'stroke', 'serangan stroke',
+            'sekarat', 'nyeri hebat', 'darurat'
+        ];
+        return emergencyKeywords.some(k => lower.includes(k));
+    }
+
+    /**
      * Process a chat message. Each sessionId gets its own isolated AI conversation.
      * @param message - The user's message
-     * @param sessionId - Unique session identifier (defaults to 'default' for backward compatibility)
+     * @param sessionId - Unique session identifier
      */
-    async processMessage(message: string, sessionId: string = 'default'): Promise<string> {
+    async processMessage(message: string, sessionId: string = 'default'): Promise<{ text: string; isEmergency: boolean; messageId: string; action?: { type: string; payload: any } }> {
         try {
             this.logger.log(`Processing message (session: ${sessionId}): ${message}`);
+
+            // 1. Core Safety Check (Hospital 4.0)
+            const isEmergency = this.isEmergencyQuery(message);
 
             // 1. Fetch Dynamic Context from Knowledge Base
             let rsContext = '';
@@ -409,7 +549,11 @@ export class ChatService implements OnModuleInit {
                         const scheduleInfo = await this.getDoctorSchedule(doctorName, dayFilter || undefined);
 
                         if (!scheduleInfo.includes('Tidak ditemukan') && !scheduleInfo.includes('Gagal')) {
-                            return scheduleInfo;
+                            return {
+                                text: scheduleInfo,
+                                isEmergency: false,
+                                messageId: await this.saveMessage(sessionId, 'model', scheduleInfo)
+                            };
                         }
                         combinedContext += `\n[DOCTOR_SEARCH_RESULT]\n${scheduleInfo}\n`;
                     }
@@ -418,31 +562,73 @@ export class ChatService implements OnModuleInit {
                 this.logger.error('Failed to handle doctor query:', doctorError);
             }
 
-            const chatSession = this.getOrCreateSession(sessionId);
+            const chatSession = await this.getOrCreateSession(sessionId);
             if (!chatSession) {
-                return this.getFallbackResponse(message);
+                return {
+                    text: this.getFallbackResponse(message),
+                    isEmergency,
+                    messageId: '',
+                    action: undefined
+                };
             }
 
             // 4. Send to Gemini
             try {
+                // Save user message to DB
+                await this.saveMessage(sessionId, 'user', message);
+
                 // Add a disclaimer instructions to the start of the message if health related
                 if (this.isHealthQuery(message)) {
-                    combinedContext += `\nCATATAN: User menanyakan hal medis/prosedur. Ingatkan bahwa ini edukatif dan tetap harus konsultasi dokter.\n`;
+                    combinedContext += `\nCATATAN: User menanyakan hal medis/prosedur. Ingatkan bahwa ini edukatif dan tetap harus konsultasi dokter.
+                    WAJIB: Selalu akhiri jawaban medis dengan kalimat 'Informasi ini bersifat edukatif, silakan konsultasi lebih lanjut dengan dokter kami untuk diagnosa pasti.'\n`;
                 }
+
+                if (isEmergency) {
+                    combinedContext += `\nURGENT: Pasien mengalami kondisi darurat. Berikan instruksi pertolongan pertama singkat dan sangat disarankan segera ke IGD.\n`;
+                }
+
+                // Contextual Booking Suggestions (Structured Actions)
+                combinedContext += `\nFORMAT KHUSUS: Jika Anda menyarankan poliklinik spesialis tertentu, sertakan di baris terakhir format [BOOK_POLI:Nama Poli]. Contoh: [BOOK_POLI:Spesialis Jantung]\n`;
 
                 const promptWithContext = `${combinedContext}\n\nUser: ${message}`;
 
                 this.logger.log(`Sending message to Gemini (session: ${sessionId}) with context.`);
                 const result = await chatSession.sendMessage(promptWithContext);
-                const response = result.response.text();
-                return response;
+                const botResponse = result.response.text();
+
+                // Save bot response to DB and get ID
+                const botMsgId = await this.saveMessage(sessionId, 'model', botResponse);
+
+                // Parse structured actions from bot response
+                let action: any = undefined;
+                const actionMatch = botResponse.match(/\[BOOK_POLI:(.+?)\]/);
+                if (actionMatch) {
+                    action = { type: 'BOOK_POLI', payload: actionMatch[1] };
+                }
+
+                return {
+                    text: botResponse.replace(/\[BOOK_POLI:.+?\]/, '').trim(),
+                    isEmergency,
+                    messageId: botMsgId,
+                    action
+                };
             } catch (error: any) {
                 this.logger.error(`Gemini API error (session: ${sessionId}):`, error?.stack || error?.message || error);
-                return 'Mohon maaf, terjadi gangguan saat berkomunikasi dengan asisten AI. Silakan coba lagi nanti.';
+                return {
+                    text: 'Mohon maaf, terjadi gangguan saat berkomunikasi dengan asisten AI. Silakan coba lagi nanti.',
+                    isEmergency: false,
+                    messageId: '',
+                    action: undefined
+                };
             }
         } catch (globalError) {
             this.logger.error('CRITICAL: Error in processMessage global catch:', globalError);
-            return 'Mohon maaf, terjadi kesalahan internal pada sistem chat kami.';
+            return {
+                text: 'Mohon maaf, terjadi kesalahan internal pada sistem chat kami.',
+                isEmergency: false,
+                messageId: '',
+                action: undefined
+            };
         }
     }
 
@@ -466,5 +652,17 @@ export class ChatService implements OnModuleInit {
         }
 
         return "Ada yang bisa saya bantu terkait layanan RSI Siti Hajar? Hubungi CS kami di (0370) 631885.";
+    }
+
+    async rateMessage(messageId: string, rating: number, comment?: string) {
+        try {
+            return await (this.prisma as any).chatFeedback.upsert({
+                where: { messageId },
+                update: { rating, comment },
+                create: { messageId, rating, comment }
+            });
+        } catch (error) {
+            this.logger.error(`Failed to rate message ${messageId}:`, error);
+        }
     }
 }
