@@ -191,6 +191,26 @@ export class PatientService {
         this.logger.warn('Could not fetch default wilayah codes, using fallback');
       }
 
+      // Get default suku bangsa, bahasa, cacat fisik
+      let defaultSukuBangsa = 1; // Default fallback (usually 1 exists)
+      let defaultBahasa = 1;
+      let defaultCacat = 1;
+
+      try {
+        const suku = await this.dbService.db('suku_bangsa').first();
+        if (suku) defaultSukuBangsa = suku.id;
+
+        const bahasa = await this.dbService.db('bahasa_pasien').first();
+        if (bahasa) defaultBahasa = bahasa.id;
+
+        const cacat = await this.dbService.db('cacat_fisik').first();
+        if (cacat) defaultCacat = cacat.id;
+
+        this.logger.log(`Using defaults - Suku: ${defaultSukuBangsa}, Bahasa: ${defaultBahasa}, Cacat: ${defaultCacat}`);
+      } catch (e) {
+        this.logger.warn('Could not fetch default demographics, using fallback 1');
+      }
+
       const patientData = {
         no_rkm_medis: noRM,
         nm_pasien: data.name,
@@ -222,9 +242,9 @@ export class PatientService {
         kabupatenpj: data.kabupaten || '-',
         perusahaan_pasien: '-',
         // Field integer, gunakan format yang sesuai struktur tabel - akan diupdate nanti
-        suku_bangsa: 0,
-        bahasa_pasien: 0,
-        cacat_fisik: 0, // Integer field, gunakan 0 sebagai default
+        suku_bangsa: defaultSukuBangsa,
+        bahasa_pasien: defaultBahasa,
+        cacat_fisik: defaultCacat, // Integer field, gunakan valid ID sebagai default
         email: data.email || '',
         nip: '',
         kd_prop: defaultPropCode, // Integer field, gunakan kode referensi yang valid
