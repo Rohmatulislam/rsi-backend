@@ -698,24 +698,31 @@ export class DoctorService {
               let finalStartTime = schedule.jam_mulai;
               let finalEndTime = schedule.jam_selesai;
 
-              if (isToday) {
-                // Check for exception today
-                // Note: date comparison needs to be careful with timezones, but usually ISO string YYYY-MM-DD works if strictly stored as UTC dates at 00:00
-                const todayDateStr = new Date().toISOString().split('T')[0];
-                const todayException = docExceptions.find(e =>
-                  e.date.toISOString().split('T')[0] === todayDateStr
-                );
+              if (schedDay !== -1) {
+                // Calculate the DATE of this schedule's next occurrence (or today)
+                let diff = schedDay - todayDayInt;
+                if (diff < 0) diff += 7; // e.g. Today Wed(3), Sched Mon(1) -> -2 -> +7 = 5 days away
 
-                if (todayException) {
-                  if (todayException.type === 'LEAVE') {
+                const targetDate = new Date(todayStart);
+                targetDate.setDate(todayStart.getDate() + diff);
+                // Use local date string (YYYY-MM-DD)
+                const targetDateStr = targetDate.toLocaleDateString('en-CA');
+
+                const exception = docExceptions.find(e => {
+                  const exDateStr = new Date(e.date).toLocaleDateString('en-CA');
+                  return exDateStr === targetDateStr;
+                });
+
+                if (exception) {
+                  if (exception.type === 'LEAVE') {
                     status = 'LEAVE';
-                    note = todayException.note || 'Cuti';
-                  } else if (todayException.type === 'RESCHEDULE') {
+                    note = exception.note || 'Cuti';
+                  } else if (exception.type === 'RESCHEDULE') {
                     status = 'RESCHEDULE';
-                    note = todayException.note || 'Diubah';
-                    if (todayException.startTime && todayException.endTime) {
-                      finalStartTime = todayException.startTime;
-                      finalEndTime = todayException.endTime;
+                    note = exception.note || 'Diubah';
+                    if (exception.startTime && exception.endTime) {
+                      finalStartTime = exception.startTime;
+                      finalEndTime = exception.endTime;
                     }
                   }
                 }
@@ -953,22 +960,31 @@ export class DoctorService {
           let finalStartTime = schedule.jam_mulai;
           let finalEndTime = schedule.jam_selesai;
 
-          if (isToday) {
-            const todayDateStr = new Date().toISOString().split('T')[0];
-            const todayException = docExceptions.find(e =>
-              e.date.toISOString().split('T')[0] === todayDateStr
-            );
+          if (schedDay !== -1) {
+            // Calculate the DATE of this schedule's next occurrence (or today)
+            let diff = schedDay - todayDayInt;
+            if (diff < 0) diff += 7; // e.g. Today Wed(3), Sched Mon(1) -> -2 -> +7 = 5 days away
 
-            if (todayException) {
-              if (todayException.type === 'LEAVE') {
+            const targetDate = new Date(todayStart);
+            targetDate.setDate(todayStart.getDate() + diff);
+            // Use local date string (YYYY-MM-DD)
+            const targetDateStr = targetDate.toLocaleDateString('en-CA');
+
+            const exception = docExceptions.find(e => {
+              const exDateStr = new Date(e.date).toLocaleDateString('en-CA');
+              return exDateStr === targetDateStr;
+            });
+
+            if (exception) {
+              if (exception.type === 'LEAVE') {
                 status = 'LEAVE';
-                note = todayException.note || 'Cuti';
-              } else if (todayException.type === 'RESCHEDULE') {
+                note = exception.note || 'Cuti';
+              } else if (exception.type === 'RESCHEDULE') {
                 status = 'RESCHEDULE';
-                note = todayException.note || 'Diubah';
-                if (todayException.startTime && todayException.endTime) {
-                  finalStartTime = todayException.startTime;
-                  finalEndTime = todayException.endTime;
+                note = exception.note || 'Diubah';
+                if (exception.startTime && exception.endTime) {
+                  finalStartTime = exception.startTime;
+                  finalEndTime = exception.endTime;
                 }
               }
             }
@@ -1066,24 +1082,54 @@ export class DoctorService {
             const todayName = daysKey[todayIndex];
             const isToday = schedule.hari_kerja === todayName || (todayName === 'MINGGU' && schedule.hari_kerja === 'AKHAD');
 
+            // Map hari_kerja to 0-6
+            const daysMap: { [key: string]: number } = {
+              'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
+            };
+            // Normalize: JUM'AT -> JUMAT, trim whitespace
+            const cleanHari = schedule.hari_kerja.toUpperCase().replace(/[^A-Z]/g, '');
+            const schedDay = daysMap[cleanHari] ?? -1;
+
             let status = 'AVAILABLE';
             let note = '';
+            let finalStartTime = schedule.jam_mulai;
+            let finalEndTime = schedule.jam_selesai;
 
-            if (isToday) {
-              const todayException = exceptions.find(e =>
-                e.date.toISOString().split('T')[0] === nowDate.toISOString().split('T')[0]
-              );
+            if (schedDay === -1) {
+              console.warn(`[WARNING] Unmapped hari_kerja: ${schedule.hari_kerja} (cleaned: ${cleanHari})`);
+            }
 
-              if (todayException) {
-                if (todayException.type === 'LEAVE') {
+            if (schedDay !== -1) {
+              // Calculate the DATE of this schedule's next occurrence (or today)
+              let diff = schedDay - todayIndex;
+              if (diff < 0) diff += 7; // e.g. Today Wed(3), Sched Mon(1) -> -2 -> +7 = 5 days away
+
+              const targetDate = new Date(nowDate);
+              targetDate.setDate(nowDate.getDate() + diff);
+              // Use local date string (YYYY-MM-DD) to match database storing date-only or local midnight
+              const targetDateStr = targetDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+
+              // DEBUG LOG
+              if (schedule.hari_kerja === 'JUMAT') {
+                console.log(`[DEBUG] JUMAT Target: ${targetDateStr}, Diff: ${diff}`);
+                console.log(`[DEBUG] Exceptions:`, exceptions.map(e => ({ date: e.date, str: new Date(e.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' }), type: e.type })));
+              }
+
+              const exception = exceptions.find(e => {
+                const exDateStr = new Date(e.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+                return exDateStr === targetDateStr;
+              });
+
+              if (exception) {
+                if (exception.type === 'LEAVE') {
                   status = 'LEAVE';
-                  note = todayException.note || 'Dokter Cuti';
-                } else if (todayException.type === 'RESCHEDULE') {
+                  note = exception.note || 'Dokter Cuti';
+                } else if (exception.type === 'RESCHEDULE') {
                   status = 'RESCHEDULE';
-                  note = todayException.note || 'Jadwal Pesan';
-                  if (todayException.startTime && todayException.endTime) {
-                    schedule.jam_mulai = todayException.startTime;
-                    schedule.jam_selesai = todayException.endTime;
+                  note = exception.note || 'Jadwal Pesan';
+                  if (exception.startTime && exception.endTime) {
+                    finalStartTime = exception.startTime;
+                    finalEndTime = exception.endTime;
                   }
                 }
               }
@@ -1093,8 +1139,8 @@ export class DoctorService {
               kd_poli: schedule.kd_poli,
               nm_poli: schedule.nm_poli,
               hari_kerja: schedule.hari_kerja,
-              jam_mulai: schedule.jam_mulai,
-              jam_selesai: schedule.jam_selesai,
+              jam_mulai: finalStartTime,
+              jam_selesai: finalEndTime,
               kuota: schedule.kuota,
               consultation_fee: schedule.registrasi || 0,
               status,
@@ -1303,14 +1349,21 @@ export class DoctorService {
     // Add Khanza data if available
     if (doctor.kd_dokter) {
       try {
+        const cacheKey = `khanza_schedules_${doctor.kd_dokter}`;
+        // const cachedSchedules = await this.cacheService.get<any>(cacheKey);
+        // if (cachedSchedules) {
+        //   this.logger.debug(`Cache hit for key: ${cacheKey}`);
+        //   doctor.scheduleDetails = cachedSchedules;
+        // } else {
+        this.logger.debug(`Cache BYPASSED for key: ${cacheKey}`);
         const kSchedules = await this.khanzaService.getDoctorSchedulesByDoctorAndPoli(doctor.kd_dokter as any);
+
         if (kSchedules && kSchedules.length > 0) {
           const days = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
           const today = days[new Date().getDay()];
           const todayDate = new Date().toISOString().split('T')[0];
 
           const counts = await this.khanzaService.db('reg_periksa')
-            .where('kd_dokter', doctor.kd_dokter)
             .where('tgl_registrasi', todayDate)
             .whereNot('stts', 'Batal')
             .groupBy('kd_poli')
@@ -1329,18 +1382,59 @@ export class DoctorService {
           );
 
           const scheduleDetails = kSchedules.map(schedule => {
-            const isToday = schedule.hari_kerja === today || (today === 'MINGGU' && schedule.hari_kerja === 'AKHAD');
+            const daysKey = ['MINGGU', 'SENIN', 'SELASA', 'RABU', 'KAMIS', 'JUMAT', 'SABTU'];
+            const todayIndex = new Date().getDay();
+            const todayName = daysKey[todayIndex];
+            const isToday = schedule.hari_kerja === todayName || (todayName === 'MINGGU' && schedule.hari_kerja === 'AKHAD');
+
+            // Map hari_kerja to 0-6
+            const daysMap: { [key: string]: number } = {
+              'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
+            };
+            // Normalize: JUM'AT -> JUMAT, trim whitespace
+            const cleanHari = schedule.hari_kerja.toUpperCase().replace(/[^A-Z]/g, '');
+            const schedDay = daysMap[cleanHari] ?? -1;
+
             let status = 'AVAILABLE';
             let note = '';
+            let finalStartTime = schedule.jam_mulai;
+            let finalEndTime = schedule.jam_selesai;
 
-            if (isToday) {
-              const todayException = exceptions.find(e =>
-                e.date.toISOString().split('T')[0] === new Date().toISOString().split('T')[0]
-              );
-              if (todayException) {
-                if (todayException.type === 'LEAVE') {
+            if (schedDay === -1) {
+              console.warn(`[WARNING] Unmapped hari_kerja: ${schedule.hari_kerja} (cleaned: ${cleanHari})`);
+            }
+
+            if (schedDay !== -1) {
+              // Calculate the DATE of this schedule's next occurrence (or today)
+              let diff = schedDay - todayIndex;
+              if (diff < 0) diff += 7; // e.g. Today Wed(3), Sched Mon(1) -> -2 -> +7 = 5 days away
+
+              const targetDate = new Date();
+              targetDate.setDate(new Date().getDate() + diff);
+              // Use local date string (YYYY-MM-DD) to match database storing date-only or local midnight
+              const targetDateStr = targetDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+
+              // DEBUG LOG REMOVED
+
+              const exception = exceptions.find(e => {
+                const exDateStr = new Date(e.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Makassar' });
+                // Filter by date AND (if kd_poli exists, it must match)
+                const dateMatch = exDateStr === targetDateStr;
+                const poliMatch = !e.kd_poli || e.kd_poli === schedule.kd_poli;
+                return dateMatch && poliMatch;
+              });
+
+              if (exception) {
+                if (exception.type === 'LEAVE') {
                   status = 'LEAVE';
-                  note = todayException.note || 'Dokter Cuti';
+                  note = exception.note || 'Dokter Cuti';
+                } else if (exception.type === 'RESCHEDULE') {
+                  status = 'RESCHEDULE';
+                  note = exception.note || 'Jadwal Pesan';
+                  if (exception.startTime && exception.endTime) {
+                    finalStartTime = exception.startTime;
+                    finalEndTime = exception.endTime;
+                  }
                 }
               }
             }
@@ -1349,8 +1443,8 @@ export class DoctorService {
               kd_poli: schedule.kd_poli,
               nm_poli: schedule.nm_poli,
               hari_kerja: schedule.hari_kerja,
-              jam_mulai: schedule.jam_mulai,
-              jam_selesai: schedule.jam_selesai,
+              jam_mulai: finalStartTime,
+              jam_selesai: finalEndTime,
               kuota: schedule.kuota,
               consultation_fee: schedule.registrasi || 0,
               isToday,

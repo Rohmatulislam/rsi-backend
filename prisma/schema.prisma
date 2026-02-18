@@ -46,13 +46,14 @@ model DoctorScheduleException {
   type        String   // 'LEAVE', 'RESCHEDULE', 'EXTRA_QUOTA'
   startTime   String?  // If rescheduled
   endTime     String?
+  kd_poli     String?  // Optional: If set, applies only to this poli code
   note        String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   doctor      Doctor   @relation(fields: [doctorId], references: [id])
 
-  @@unique([doctorId, date])
+  @@unique([doctorId, date, kd_poli])
   @@map("doctor_schedule_exceptions")
 }
 
