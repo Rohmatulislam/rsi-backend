@@ -638,14 +638,50 @@ export class DoctorService {
           'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
         };
 
+        // Fetch exceptions for the next 7 days for all active doctors
+        const todayFn = new Date();
+        const next7Days = new Date(todayFn);
+        next7Days.setDate(todayFn.getDate() + 7);
+
+        // Optimization: Fetch all exceptions for these doctors in one go
+        // Note: we fetch strictly from today to avoid old exceptions
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
+        const doctorIds = doctors.map((d: any) => d.id as string);
+        const allExceptions = await this.prisma.doctorScheduleException.findMany({
+          where: {
+            doctorId: { in: doctorIds },
+            date: {
+              gte: todayStart,
+              lte: next7Days
+            },
+            isActive: true
+          }
+        });
+
         // Enhance doctors with schedule information from Khanza including poli info
         const enhancedDoctors = doctors.map((doctor: any) => {
           const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
+          const docExceptions = allExceptions.filter(e => e.doctorId === doctor.id);
 
+          // Patch local schedules for DoctorCard "Jadwal" display
+          const patchedSchedules = (doctor.schedules || []).map((s: any) => {
+            const diff = (s.dayOfWeek - todayDayInt + 7) % 7;
+            const targetDate = new Date(todayStart);
+            targetDate.setDate(targetDate.getDate() + diff);
+            const dateStr = targetDate.toISOString().split('T')[0];
 
+            const exception = docExceptions.find(e => e.date.toISOString().split('T')[0] === dateStr);
+            if (exception && exception.type === 'RESCHEDULE' && exception.startTime && exception.endTime) {
+              return { ...s, startTime: exception.startTime, endTime: exception.endTime };
+            }
+            return s;
+          });
 
           return {
             ...doctor,
+            schedules: patchedSchedules,
             scheduleDetails: doctorSchedules.map(schedule => {
               const hariKerja = schedule?.hari_kerja || '';
               const schedDay = daysMap[hariKerja.toUpperCase()] ?? -1;
@@ -657,16 +693,46 @@ export class DoctorService {
               const currentBooked = isToday ? (todayCounts.get(doctor.kd_dokter) || 0) : 0;
               const remaining = Math.max(0, totalQuota - currentBooked);
 
+              let status = 'AVAILABLE';
+              let note = '';
+              let finalStartTime = schedule.jam_mulai;
+              let finalEndTime = schedule.jam_selesai;
+
+              if (isToday) {
+                // Check for exception today
+                // Note: date comparison needs to be careful with timezones, but usually ISO string YYYY-MM-DD works if strictly stored as UTC dates at 00:00
+                const todayDateStr = new Date().toISOString().split('T')[0];
+                const todayException = docExceptions.find(e =>
+                  e.date.toISOString().split('T')[0] === todayDateStr
+                );
+
+                if (todayException) {
+                  if (todayException.type === 'LEAVE') {
+                    status = 'LEAVE';
+                    note = todayException.note || 'Cuti';
+                  } else if (todayException.type === 'RESCHEDULE') {
+                    status = 'RESCHEDULE';
+                    note = todayException.note || 'Diubah';
+                    if (todayException.startTime && todayException.endTime) {
+                      finalStartTime = todayException.startTime;
+                      finalEndTime = todayException.endTime;
+                    }
+                  }
+                }
+              }
+
               return {
                 kd_poli: schedule.kd_poli,
                 nm_poli: schedule.nm_poli,
                 hari_kerja: schedule.hari_kerja,
-                jam_mulai: schedule.jam_mulai,
-                jam_selesai: schedule.jam_selesai,
+                jam_mulai: finalStartTime,
+                jam_selesai: finalEndTime,
                 kuota: totalQuota,
                 sisa_kuota: remaining, // Use this for display
                 is_today: isToday,
                 consultation_fee: schedule.registrasi || 0,
+                status,
+                note
               };
             })
           };
@@ -831,20 +897,96 @@ export class DoctorService {
 
     });
 
+    // Fetch exceptions for the next 7 days for recommended doctors
+    const todayFn = new Date();
+    const next7Days = new Date(todayFn);
+    next7Days.setDate(todayFn.getDate() + 7);
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const doctorIds = doctors.map((d: any) => d.id as string);
+    const allExceptions = await this.prisma.doctorScheduleException.findMany({
+      where: {
+        doctorId: { in: doctorIds },
+        date: {
+          gte: todayStart,
+          lte: next7Days
+        },
+        isActive: true
+      }
+    });
+
+    const daysMap: { [key: string]: number } = {
+      'MINGGU': 0, 'SENIN': 1, 'SELASA': 2, 'RABU': 3, 'KAMIS': 4, 'JUMAT': 5, 'SABTU': 6, 'AKHAD': 0
+    };
+    const todayDayInt = new Date().getDay() === 0 ? 0 : new Date().getDay();
+
     // Enhance doctors with schedule information from Khanza including poli info
-    const enhancedDoctors = doctors.map(doctor => {
+    const enhancedDoctors = doctors.map((doctor: any) => {
       const doctorSchedules = kSchedules.filter(schedule => schedule.kd_dokter === doctor.kd_dokter);
+      const docExceptions = allExceptions.filter(e => e.doctorId === doctor.id);
+
+      // Patch local schedules for DoctorCard "Jadwal" display
+      const patchedSchedules = (doctor.schedules || []).map((s: any) => {
+        const diff = (s.dayOfWeek - todayDayInt + 7) % 7;
+        const targetDate = new Date(todayStart);
+        targetDate.setDate(targetDate.getDate() + diff);
+        const dateStr = targetDate.toISOString().split('T')[0];
+
+        const exception = docExceptions.find(e => e.date.toISOString().split('T')[0] === dateStr);
+        if (exception && exception.type === 'RESCHEDULE' && exception.startTime && exception.endTime) {
+          return { ...s, startTime: exception.startTime, endTime: exception.endTime };
+        }
+        return s;
+      });
+
       return {
         ...doctor,
-        scheduleDetails: doctorSchedules.map(schedule => ({
-          kd_poli: schedule.kd_poli,
-          nm_poli: schedule.nm_poli,
-          hari_kerja: schedule.hari_kerja,
-          jam_mulai: schedule.jam_mulai,
-          jam_selesai: schedule.jam_selesai,
-          kuota: schedule.kuota,
-          consultation_fee: schedule.registrasi || 0,
-        }))
+        schedules: patchedSchedules,
+        scheduleDetails: doctorSchedules.map(schedule => {
+          const hariKerja = schedule?.hari_kerja || '';
+          const schedDay = daysMap[hariKerja.toUpperCase()] ?? -1;
+          const isToday = schedDay === todayDayInt && schedDay !== -1;
+
+          let status = 'AVAILABLE';
+          let note = '';
+          let finalStartTime = schedule.jam_mulai;
+          let finalEndTime = schedule.jam_selesai;
+
+          if (isToday) {
+            const todayDateStr = new Date().toISOString().split('T')[0];
+            const todayException = docExceptions.find(e =>
+              e.date.toISOString().split('T')[0] === todayDateStr
+            );
+
+            if (todayException) {
+              if (todayException.type === 'LEAVE') {
+                status = 'LEAVE';
+                note = todayException.note || 'Cuti';
+              } else if (todayException.type === 'RESCHEDULE') {
+                status = 'RESCHEDULE';
+                note = todayException.note || 'Diubah';
+                if (todayException.startTime && todayException.endTime) {
+                  finalStartTime = todayException.startTime;
+                  finalEndTime = todayException.endTime;
+                }
+              }
+            }
+          }
+
+          return {
+            kd_poli: schedule.kd_poli,
+            nm_poli: schedule.nm_poli,
+            hari_kerja: schedule.hari_kerja,
+            jam_mulai: finalStartTime,
+            jam_selesai: finalEndTime,
+            kuota: schedule.kuota,
+            consultation_fee: schedule.registrasi || 0,
+            status,
+            note,
+            is_today: isToday
+          };
+        })
       };
     });
 
@@ -932,9 +1074,18 @@ export class DoctorService {
                 e.date.toISOString().split('T')[0] === nowDate.toISOString().split('T')[0]
               );
 
-              if (todayException?.type === 'LEAVE') {
-                status = 'LEAVE';
-                note = todayException.note || 'Dokter Cuti';
+              if (todayException) {
+                if (todayException.type === 'LEAVE') {
+                  status = 'LEAVE';
+                  note = todayException.note || 'Dokter Cuti';
+                } else if (todayException.type === 'RESCHEDULE') {
+                  status = 'RESCHEDULE';
+                  note = todayException.note || 'Jadwal Pesan';
+                  if (todayException.startTime && todayException.endTime) {
+                    schedule.jam_mulai = todayException.startTime;
+                    schedule.jam_selesai = todayException.endTime;
+                  }
+                }
               }
             }
 
