@@ -17,7 +17,7 @@ export class ReminderService implements OnModuleInit {
     this.logger.log('ReminderService initialized - will run on schedule');
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_8AM) // Run once daily at 8 AM
+  // @Cron(CronExpression.EVERY_DAY_AT_8AM) // Disabled per user request (Manual trigger only)
   async sendReminders() {
     this.logger.log('Running scheduled appointment reminders...');
 

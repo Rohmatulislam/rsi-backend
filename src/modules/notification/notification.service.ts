@@ -471,7 +471,7 @@ export class NotificationService {
   }
 
   private generateReminderMessage(payload: Partial<NotificationPayload>): string {
-    const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
+    const { patientName, bookingDate, doctorName, bookingCode, poliName } = payload;
     return `*PENGINGAT (REMINDER) KUNJUNGAN - RSI SITI HAJAR*\n\n` +
       `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
       `Sampai jumpa BESOK dalam janji temu Anda di RSI Siti Hajar Mataram.\n\n` +
@@ -480,8 +480,8 @@ export class NotificationService {
       `👨‍⚕️ Dokter: ${doctorName}\n` +
       `🏥 Poliklinik: ${poliName}\n` +
       `🗓️ Tanggal: ${bookingDate}\n` +
-      `⏰ Waktu: ${bookingTime} WITA\n\n` +
-      `Mohon hadir tepat waktu dan membawa persyaratan pendaftaran untuk kenyamanan bersama.\n\n` +
+      `⏰ Waktu: *Mohon hadir 30 menit sebelum jadwal praktik dimulai*\n\n` +
+      `Mohon membawa persyaratan pendaftaran untuk kenyamanan bersama.\n\n` +
       `Sampai jumpa esok hari.`;
   }
 
