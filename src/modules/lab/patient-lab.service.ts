@@ -32,6 +32,8 @@ export class PatientLabService {
             return history;
         } catch (error) {
             this.logger.error(`Error fetching lab history for RM ${noRM}`, error);
+            const fs = require('fs');
+            fs.appendFileSync('error-lab.log', `${new Date().toISOString()} - Error: ${(error as any).message}\nStack: ${(error as any).stack}\n`);
             return [];
         }
     }

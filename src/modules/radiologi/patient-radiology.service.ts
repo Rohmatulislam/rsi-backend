@@ -32,6 +32,8 @@ export class PatientRadiologyService {
             return history;
         } catch (error) {
             this.logger.error(`Error fetching radiology history for RM ${noRM}`, error);
+            const fs = require('fs');
+            fs.appendFileSync('error-rad.log', `${new Date().toISOString()} - Error: ${(error as any).message}\nStack: ${(error as any).stack}\n`);
             return [];
         }
     }
