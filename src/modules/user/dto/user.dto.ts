@@ -12,6 +12,10 @@ export class UpdateProfileDto {
     @IsString()
     @IsOptional()
     image?: string; // Base64 atau URL
+
+    @IsString()
+    @IsOptional()
+    nik?: string;
 }
 
 export class ChangePasswordDto {

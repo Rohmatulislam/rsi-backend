@@ -14,6 +14,7 @@ export class PatientLabService {
     async getPatientLabHistory(noRM: string) {
         try {
             const history = await this.khanzaDb.db('periksa_lab as p')
+                .join('reg_periksa as r', 'p.no_rawat', 'r.no_rawat')
                 .join('jns_perawatan_lab as j', 'p.kd_jenis_prw', 'j.kd_jenis_prw')
                 .join('dokter as d', 'p.kd_dokter', 'd.kd_dokter')
                 .select(
@@ -25,7 +26,7 @@ export class PatientLabService {
                     'd.nm_dokter',
                     'p.status'
                 )
-                .where('p.no_rkm_medis', noRM)
+                .where('r.no_rkm_medis', noRM)
                 .orderBy('p.tgl_periksa', 'desc')
                 .orderBy('p.jam', 'desc');
 

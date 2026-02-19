@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Post, Delete, Body, Param, Req, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Post, Delete, Body, Param, Req, UseGuards, Query } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateProfileDto, ChangePasswordDto, CreateFamilyMemberDto } from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -59,8 +59,14 @@ export class UserController {
 
     // Health History
     @Get('me/health-history')
-    async getHealthHistory(@Req() req: any) {
+    async getHealthHistory(@Req() req: any, @Query('noRM') noRM?: string) {
         const userId = req.user.id;
-        return this.userService.getHealthHistory(userId);
+        return this.userService.getHealthHistory(userId, noRM);
+    }
+
+    @Get('me/linked-patients')
+    async getLinkedPatients(@Req() req: any) {
+        const userId = req.user.id;
+        return this.userService.getLinkedPatients(userId);
     }
 }

@@ -377,4 +377,54 @@ export class PatientService {
   async getCacatFisiks() {
     return this.dbService.db('cacat_fisik').select('*');
   }
+
+  async getPatientHistory(noRM: string) {
+    try {
+      // Fetch registrations (visits)
+      const visits = await this.dbService.db('reg_periksa')
+        .join('dokter', 'reg_periksa.kd_dokter', '=', 'dokter.kd_dokter')
+        .join('poliklinik', 'reg_periksa.kd_poli', '=', 'poliklinik.kd_poli')
+        .leftJoin('diagnosa_pasien', 'reg_periksa.no_rawat', '=', 'diagnosa_pasien.no_rawat')
+        .leftJoin('penyakit', 'diagnosa_pasien.kd_penyakit', '=', 'penyakit.kd_penyakit')
+        .where('reg_periksa.no_rkm_medis', noRM)
+        .select(
+          'reg_periksa.no_rawat',
+          'reg_periksa.tgl_registrasi',
+          'dokter.nm_dokter',
+          'poliklinik.nm_poli',
+          'penyakit.nm_penyakit',
+          'diagnosa_pasien.prioritas'
+        )
+        .orderBy('reg_periksa.tgl_registrasi', 'desc')
+        .limit(20);
+
+      // Group by no_rawat to handle multiple diagnoses per visit
+      const historyMap = new Map();
+
+      visits.forEach(visit => {
+        if (!historyMap.has(visit.no_rawat)) {
+          historyMap.set(visit.no_rawat, {
+            id: visit.no_rawat,
+            date: visit.tgl_registrasi,
+            doctor: visit.nm_dokter,
+            diagnosis: visit.nm_penyakit || 'Belum ada diagnosa',
+            notes: `Poli: ${visit.nm_poli}`
+          });
+        } else if (visit.nm_penyakit) {
+          // Append additional diagnoses
+          const current = historyMap.get(visit.no_rawat);
+          if (current.diagnosis === 'Belum ada diagnosa') {
+            current.diagnosis = visit.nm_penyakit;
+          } else {
+            current.diagnosis += `, ${visit.nm_penyakit}`;
+          }
+        }
+      });
+
+      return Array.from(historyMap.values());
+    } catch (error) {
+      this.logger.error(`Error fetching patient history for RM ${noRM}`, error);
+      return [];
+    }
+  }
 }

@@ -52,6 +52,10 @@ export class LabController {
 
     @Get('history/:noRM')
     async getPatientLabHistory(@Param('noRM') noRM: string) {
+        try {
+            const fs = require('fs');
+            fs.appendFileSync('debug-lab-ctrl.log', `Request for ${noRM} at ${new Date().toISOString()}\n`);
+        } catch (e) { }
         return this.patientLabService.getPatientLabHistory(noRM);
     }
 

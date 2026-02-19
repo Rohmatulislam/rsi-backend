@@ -59,6 +59,12 @@ export class KhanzaDBService implements OnModuleDestroy {
       return true;
     } catch (error) {
       this.logger.error('Database connection failed', error);
+      try {
+        const fs = require('fs');
+        fs.appendFileSync('error-db-conn.log', `${new Date().toISOString()} - DB Connection Failed: ${(error as any).message}\n`);
+      } catch (e) {
+        // ignore
+      }
       return false;
     }
   }
