@@ -672,7 +672,12 @@ export class DoctorService {
             targetDate.setDate(targetDate.getDate() + diff);
             const dateStr = targetDate.toISOString().split('T')[0];
 
-            const exception = docExceptions.find(e => e.date.toISOString().split('T')[0] === dateStr);
+            // Match exception by date AND poli (if exception has kd_poli, it must match)
+            const exception = docExceptions.find(e => {
+              const dateMatch = e.date.toISOString().split('T')[0] === dateStr;
+              const poliMatch = !e.kd_poli || e.kd_poli === s.kd_poli;
+              return dateMatch && poliMatch;
+            });
             if (exception && exception.type === 'RESCHEDULE' && exception.startTime && exception.endTime) {
               return { ...s, startTime: exception.startTime, endTime: exception.endTime };
             }
@@ -710,7 +715,10 @@ export class DoctorService {
 
                 const exception = docExceptions.find(e => {
                   const exDateStr = new Date(e.date).toLocaleDateString('en-CA');
-                  return exDateStr === targetDateStr;
+                  const dateMatch = exDateStr === targetDateStr;
+                  // If exception has kd_poli, it only applies to that specific poli
+                  const poliMatch = !e.kd_poli || e.kd_poli === schedule.kd_poli;
+                  return dateMatch && poliMatch;
                 });
 
                 if (exception) {

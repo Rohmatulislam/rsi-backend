@@ -387,7 +387,7 @@ export class NotificationService {
     const { patientName, bookingDate, bookingTime, doctorName, bookingCode, poliName } = payload;
     return `*KONFIRMASI PENDAFTARAN - RSI SITI HAJAR*\n\n` +
       `Salam Sejahtera Bapak/Ibu *${patientName}*,\n\n` +
-      `Pendaftaran pendaftaran Anda telah berhasil diproses oleh sistem kami. Berikut adalah rincian janji temu Anda:\n\n` +
+      `Pendaftaran Anda telah berhasil diproses oleh sistem kami. Berikut adalah rincian janji temu Anda:\n\n` +
       `📌 *Detail Kunjungan:*\n` +
       `🎫 Kode Booking: *${bookingCode}*\n` +
       `👨‍⚕️ Dokter: ${doctorName}\n` +
